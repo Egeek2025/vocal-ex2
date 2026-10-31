@@ -226,7 +226,7 @@ final class PracticeSession {
     func deleteDemo() {
         DemoStore.shared.delete(id: exercise.id)
         demo = nil
-        notice = "已删除你的示范，示范改回钢琴。""
+        notice = "已删除你的示范，示范改回钢琴。"
     }
 
     /// Text and kind for the phase pill at a given moment.

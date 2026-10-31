@@ -1,5 +1,6 @@
 import SwiftUI
 import AVKit
+import UniformTypeIdentifiers
 
 /// Opens the course video at this exercise: the local copy when the video folder has it, otherwise YouTube.
 struct CourseVideoButton: View {
