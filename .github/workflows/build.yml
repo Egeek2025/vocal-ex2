@@ -1,0 +1,78 @@
+name: Build
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test-core:
+    name: Core tests
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run swift test
+        run: swift test
+
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: iOS
+            destination: generic/platform=iOS
+            signing: CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+          - name: macOS
+            destination: generic/platform=macOS
+            # ad-hoc signature so the downloaded app launches and keeps its sandbox/microphone entitlements
+            signing: CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM=
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode version
+        run: xcodebuild -version
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild -project VocalStudio.xcodeproj -scheme VocalStudio \
+            -destination '${{ matrix.destination }}' -configuration Release \
+            -derivedDataPath build \
+            ${{ matrix.signing }} \
+            build > xcodebuild.log 2>&1 || true
+          # surface compiler errors as annotations so they can be read without the full log
+          { grep -E "error:" xcodebuild.log || true; } | sort -u | head -40 | while IFS= read -r l; do echo "::error::${l#$GITHUB_WORKSPACE/}"; done || true
+          grep -E "BUILD (SUCCEEDED|FAILED)" xcodebuild.log || true
+          if ! grep -q "BUILD SUCCEEDED" xcodebuild.log; then
+            echo "::error title=xcodebuild tail::$(grep -vE '^\s*(cd|export|builtin|/Applications/Xcode)' xcodebuild.log | tail -n 40 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
+            exit 1
+          fi
+      - name: Check bundled resources
+        run: |
+          cd build/Build/Products/Release*
+          if [ "${{ matrix.name }}" = "iOS" ]; then R=VocalStudio.app; else R=VocalStudio.app/Contents/Resources; fi
+          ls "$R" | grep -iE 'appicon|\.icns|assets\.car' || true
+          P=$(ls "$R" | grep -c '^piano_.*\.m4a$' || true)
+          echo "piano samples: $P"
+          test "$P" -eq 61 || { echo "expected 61 piano samples"; exit 1; }
+          ls "$R" | grep -qiE 'AppIcon' || { echo "app icon missing"; exit 1; }
+      - name: Package app
+        run: |
+          cd build/Build/Products/Release*
+          if [ "${{ matrix.name }}" = "iOS" ]; then
+            mkdir -p Payload && cp -R VocalStudio.app Payload/ && zip -qry "$GITHUB_WORKSPACE/VocalStudio-iOS-unsigned.ipa" Payload
+          else
+            codesign --verify --strict VocalStudio.app
+            codesign -dv --entitlements - VocalStudio.app 2>&1 | head -20
+            # the video folder is remembered with an app-scoped bookmark, which needs this entitlement
+            codesign -d --entitlements - --xml VocalStudio.app 2>/dev/null | grep -q "files.bookmarks.app-scope" || { echo "::error::macOS app lacks the bookmarks entitlement"; exit 1; }
+            ditto -c -k --keepParent VocalStudio.app "$GITHUB_WORKSPACE/VocalStudio-macOS.zip"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VocalStudio-${{ matrix.name }}
+          path: |
+            VocalStudio-iOS-unsigned.ipa
+            VocalStudio-macOS.zip
+          if-no-files-found: ignore

@@ -1,0 +1,151 @@
+name: Release
+
+# Publish a GitHub Release with downloadable apps.
+#   - push a tag like v1.0.1, or
+#   - run this workflow from the Actions tab and enter a version number.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "版本号，例如 1.0.1（会创建标签 v1.0.1）"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    env:
+      # Optional: set these repository secrets to get a Developer ID signed and notarized Mac app.
+      MAC_CERT_P12: ${{ secrets.MAC_CERT_P12 }}
+      MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # The app ships no course audio or video: those stay on the user's own devices.
+      - name: Keep course media out of releases
+        run: |
+          FOUND=$(find Sources -type f \( -name '*.m4a' -o -name '*.mp4' -o -name '*.mov' -o -name '*.caf' -o -name '*.wav' \) -not -path 'Sources/Resources/PianoSamples/*')
+          if [ -n "$FOUND" ]; then
+            echo "::error::应用资源里有钢琴采样以外的音视频文件，课程音视频不能打包发布：$FOUND"
+            exit 1
+          fi
+
+      - name: Resolve version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then V="${{ inputs.version }}"; else V="${GITHUB_REF_NAME}"; fi
+          V="${V#v}"
+          echo "$V" | grep -Eq '^[0-9]+(\.[0-9]+){1,2}$' || { echo "版本号格式应为 1.2 或 1.2.3，收到：$V"; exit 1; }
+          echo "VERSION=$V" >> "$GITHUB_ENV"
+          echo "TAG=v$V" >> "$GITHUB_ENV"
+          mkdir -p dist
+
+      - name: Core tests
+        run: swift test
+
+      - name: Build macOS app
+        run: |
+          set -o pipefail
+          xcodebuild -project VocalStudio.xcodeproj -scheme VocalStudio \
+            -destination 'generic/platform=macOS' -configuration Release -derivedDataPath build/mac \
+            MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= \
+            build 2>&1 | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
+          APP=$(echo build/mac/Build/Products/Release/VocalStudio.app)
+          test -d "$APP" || { echo "macOS app was not produced"; exit 1; }
+          echo "MAC_APP=$APP" >> "$GITHUB_ENV"
+
+      - name: Sign with Developer ID (only if certificate secrets are set)
+        if: env.MAC_CERT_P12 != ''
+        run: |
+          KC="$RUNNER_TEMP/release.keychain-db"; KP="$(uuidgen)"
+          security create-keychain -p "$KP" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KP" "$KC"
+          echo "$MAC_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$MAC_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KC"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KP" "$KC" > /dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          ID=$(security find-identity -v -p codesigning "$KC" | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
+          test -n "$ID" || { echo "证书里没有找到 Developer ID Application 身份"; exit 1; }
+          codesign -d --entitlements - --xml "$MAC_APP" > "$RUNNER_TEMP/app.entitlements"
+          codesign --force --options runtime --timestamp --entitlements "$RUNNER_TEMP/app.entitlements" --sign "$ID" "$MAC_APP"
+          codesign --verify --strict --verbose=2 "$MAC_APP"
+          echo "MAC_SIGNED=1" >> "$GITHUB_ENV"
+
+      - name: Notarize (only if Apple ID secrets are set)
+        if: env.MAC_SIGNED == '1' && env.APPLE_ID != ''
+        run: |
+          ditto -c -k --keepParent "$MAC_APP" "$RUNNER_TEMP/notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+          xcrun stapler staple "$MAC_APP"
+          echo "MAC_NOTARIZED=1" >> "$GITHUB_ENV"
+
+      - name: Package macOS (zip + dmg)
+        run: |
+          codesign --verify --strict "$MAC_APP"
+          ditto -c -k --keepParent "$MAC_APP" "dist/VocalStudio-$VERSION-macOS.zip"
+          STAGE="$RUNNER_TEMP/dmg"; mkdir -p "$STAGE"
+          cp -R "$MAC_APP" "$STAGE/"
+          ln -s /Applications "$STAGE/Applications"
+          hdiutil create -volname "练声房 $VERSION" -srcfolder "$STAGE" -ov -format UDZO "dist/VocalStudio-$VERSION-macOS.dmg"
+
+      - name: Build iPhone/iPad app (unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild -project VocalStudio.xcodeproj -scheme VocalStudio \
+            -destination 'generic/platform=iOS' -configuration Release -derivedDataPath build/ios \
+            MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build 2>&1 | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
+          APP=build/ios/Build/Products/Release-iphoneos/VocalStudio.app
+          test -d "$APP" || { echo "iOS app was not produced"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$APP" "$RUNNER_TEMP/ipa/Payload/"
+          (cd "$RUNNER_TEMP/ipa" && zip -qry "$GITHUB_WORKSPACE/dist/VocalStudio-$VERSION-iOS-unsigned.ipa" Payload)
+
+      - name: Write release notes
+        run: |
+          if [ "$MAC_NOTARIZED" = "1" ]; then
+            MAC_NOTE="Mac 版已用 Developer ID 签名并通过 Apple 公证，下载后可以直接打开。"
+          elif [ "$MAC_SIGNED" = "1" ]; then
+            MAC_NOTE="Mac 版已用 Developer ID 签名，但没有公证。第一次打开时请右键点应用 →「打开」。"
+          else
+            MAC_NOTE="Mac 版使用临时签名（没有 Apple 开发者证书）。第一次打开会提示「无法验证开发者」：右键点应用 →「打开」，或在「系统设置 → 隐私与安全性」里点「仍要打开」。"
+          fi
+          cat > dist/notes.md <<EOF
+          练声房 ${VERSION}，配合 Justin Stoney「Voice Lessons To The World」12 周方案的练声应用。
+
+          ## Mac（macOS 14 或更新）
+          下载 \`VocalStudio-$VERSION-macOS.dmg\`，打开后把「VocalStudio」拖进「应用程序」。也可以下载 zip 直接解压。
+
+          $MAC_NOTE
+
+          ## iPhone / iPad（iOS 17 或更新）
+          \`VocalStudio-$VERSION-iOS-unsigned.ipa\` 没有签名，不能直接安装。可以任选一种方式：
+          - 用 Sideloadly 或 AltStore，在电脑上用你自己的 Apple ID 给这个 ipa 签名并装到手机（免费 Apple ID 装的应用每 7 天要重新签一次）。
+          - 在 Mac 上用 Xcode 打开源码，选你的 Apple ID 作为 Team，连上手机直接运行（见 README）。
+
+          首次使用会请求麦克风权限，请允许。练习时建议戴耳机。
+
+          钢琴采样来自 FluidR3 GM 音色库（Frank Wen，CC BY 3.0）。
+          EOF
+          ls -la dist
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" dist/*.dmg dist/*.zip dist/*.ipa --clobber
+          else
+            gh release create "$TAG" dist/*.dmg dist/*.zip dist/*.ipa \
+              --target "$GITHUB_SHA" --title "练声房 $VERSION" --notes-file dist/notes.md
+          fi

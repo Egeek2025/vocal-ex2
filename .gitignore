@@ -1,0 +1,17 @@
+.DS_Store
+build/
+DerivedData/
+.build/
+.swiftpm/
+*.xcuserstate
+xcuserdata/
+*.ipa
+*.dSYM.zip
+
+# course videos downloaded by tools/course/fetch.py
+tools/course/media/
+# course material stays on your own machine: analysis with subtitle text, and clips cut from the videos
+tools/course/output/
+Sources/Resources/CourseDemos/
+__pycache__/
+tools/course/.venv/
