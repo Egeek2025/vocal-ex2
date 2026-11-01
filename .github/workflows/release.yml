@@ -121,7 +121,9 @@ jobs:
             MAC_NOTE="Mac 版使用临时签名（没有 Apple 开发者证书）。第一次打开会提示「无法验证开发者」：右键点应用 →「打开」，或在「系统设置 → 隐私与安全性」里点「仍要打开」。"
           fi
           cat > dist/notes.md <<EOF
-          练声房 ${VERSION}，配合 Justin Stoney「Voice Lessons To The World」12 周方案的练声应用。
+          练声房 ${VERSION}，跟着老师的课程练声：Justin Stoney「Voice Lessons To The World」12 周方案（YouTube），以及 Peo 老师的欧美流行 / SLS 唱法课程（Bilibili），在「设置」里切换。
+
+          应用不包含任何课程音视频。在「设置」里指定你自己下载的视频所在文件夹，练习页里就能直接跟着视频练（下载工具见仓库的 tools/course）。
 
           ## Mac（macOS 14 或更新）
           下载 \`VocalStudio-$VERSION-macOS.dmg\`，打开后把「VocalStudio」拖进「应用程序」。也可以下载 zip 直接解压。
@@ -136,6 +138,7 @@ jobs:
           首次使用会请求麦克风权限，请允许。练习时建议戴耳机。
 
           钢琴采样来自 FluidR3 GM 音色库（Frank Wen，CC BY 3.0）。
+          课程视频版权归各位老师所有。
           EOF
           ls -la dist
 
