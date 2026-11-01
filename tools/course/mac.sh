@@ -22,6 +22,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."          # repository root
 PY=tools/course/.venv/bin/python
+# ffmpeg/ffprobe downloaded by setup when Homebrew has none (Intel Macs), and deno
+export PATH="$PWD/tools/course/.bin:$HOME/.deno/bin:$PATH"
 export VOCAL_MEDIA="${MEDIA:-$HOME/Movies/练声房视频}"
 BROWSER="${BROWSER:-chrome}"
 
@@ -43,18 +45,48 @@ bili_env() {
 
 case "${1:-help}" in
   setup)
-    if ! command -v brew >/dev/null; then
-      echo "需要先安装 Homebrew：https://brew.sh （把页面上的一行命令粘贴到「终端」运行）"
-      exit 1
+    # Homebrew no longer has ready-made packages for Intel Macs, so every tool has a fallback that needs no build
+    have_brew=$(command -v brew >/dev/null && echo 1 || true)
+
+    # ffmpeg + ffprobe: Homebrew, else the static builds from evermeet.cx (Intel; Apple Silicon runs them via Rosetta)
+    if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+      if [ -n "$have_brew" ] && brew install ffmpeg; then
+        :
+      else
+        echo "Homebrew 装不了 ffmpeg，改为下载静态版 ffmpeg 和 ffprobe 到 tools/course/.bin"
+        mkdir -p tools/course/.bin
+        for tool in ffmpeg ffprobe; do
+          url="https://evermeet.cx/ffmpeg/getrelease/zip"
+          [ "$tool" = ffprobe ] && url="https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip"
+          curl -fL --retry 3 -o "tools/course/.bin/$tool.zip" "$url"
+          unzip -o -q "tools/course/.bin/$tool.zip" -d tools/course/.bin
+          rm "tools/course/.bin/$tool.zip"
+          chmod +x "tools/course/.bin/$tool"
+          xattr -d com.apple.quarantine "tools/course/.bin/$tool" 2>/dev/null || true
+        done
+      fi
     fi
-    pkgs=()
-    command -v ffmpeg >/dev/null || pkgs+=(ffmpeg)
-    command -v python3 >/dev/null && python3 -c "import venv, ensurepip" 2>/dev/null || pkgs+=(python)
-    command -v node >/dev/null || command -v deno >/dev/null || pkgs+=(node)
-    if [ ${#pkgs[@]} -gt 0 ]; then
-      echo "用 Homebrew 安装：${pkgs[*]}"
-      brew install "${pkgs[@]}"
+    ffmpeg -version | head -1
+
+    # Python 3.10 or newer (current yt-dlp needs it)
+    if ! python3 -c 'import sys, venv, ensurepip; sys.exit(sys.version_info < (3, 10))' 2>/dev/null; then
+      if [ -z "$have_brew" ] || ! brew install python@3.12; then
+        echo
+        echo "需要 Python 3.10 或更新的版本。请到 https://www.python.org/downloads/macos/ 下载安装包"
+        echo "（选 macOS 64-bit universal2 installer），装好后重新打开终端，再运行 tools/course/mac.sh setup"
+        exit 1
+      fi
     fi
+    python3 --version
+
+    # JavaScript runtime for YouTube: node from Homebrew, else deno from its official installer
+    if ! command -v node >/dev/null && ! command -v deno >/dev/null; then
+      if [ -z "$have_brew" ] || ! brew install node; then
+        echo "Homebrew 装不了 node，改为安装 deno（YouTube 下载需要的 JavaScript 运行环境）"
+        curl -fsSL https://deno.land/install.sh | sh -s -- -y --no-modify-path
+      fi
+    fi
+
     tools/course/setup.sh
     mkdir -p "$VOCAL_MEDIA"
     echo

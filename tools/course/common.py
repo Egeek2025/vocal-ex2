@@ -12,6 +12,9 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
+# ffmpeg/ffprobe that mac.sh setup downloads when Homebrew has none (Intel Macs)
+if (HERE / ".bin").is_dir():
+    os.environ["PATH"] = str(HERE / ".bin") + os.pathsep + os.environ.get("PATH", "")
 COURSE_SWIFT = ROOT / "Sources" / "Core" / "Course.swift"
 PEO_SWIFT = ROOT / "Sources" / "Core" / "Peo.swift"
 # downloaded videos, subtitles, chapter info (not in git); VOCAL_MEDIA puts them anywhere, e.g. ~/Movies/练声房视频

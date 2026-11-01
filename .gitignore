@@ -15,3 +15,4 @@ tools/course/output/
 Sources/Resources/CourseDemos/
 __pycache__/
 tools/course/.venv/
+tools/course/.bin/
