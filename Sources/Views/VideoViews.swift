@@ -21,6 +21,112 @@ struct CourseVideoButton: View {
     }
 }
 
+/// A small play button for exercise rows: opens the local course video at this exercise.
+/// Shows nothing when the folder has no copy of the video.
+struct VideoQuickButton: View {
+    @Environment(VideoLibrary.self) private var videos
+    let exercise: Exercise
+    @State private var showing = false
+
+    var body: some View {
+        if let file = videos.file(for: exercise) {
+            Button { showing = true } label: {
+                Image(systemName: "play.rectangle.fill").imageScale(.large)
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("看视频跟练")
+            .sheet(isPresented: $showing) { CourseVideoPlayer(exercise: exercise, file: file) }
+        }
+    }
+}
+
+/// Every course video of the current teacher, in plan order, with its exercises as chapters.
+struct CourseVideosView: View {
+    @Environment(AppModel.self) private var model
+    @Environment(VideoLibrary.self) private var videos
+    @State private var playing: (exercise: Exercise, file: URL)?
+
+    private struct Episode: Identifiable {
+        let ep: Int
+        let exercises: [Exercise]
+        var id: Int { ep }
+    }
+
+    private var episodes: [Episode] {
+        let t = model.teacher
+        var order: [Int] = []
+        for id in t.weeks.flatMap(\.ex) + t.exercises.map(\.id) {
+            if let e = Course.byID[id], e.videoID != nil, !order.contains(e.ep) { order.append(e.ep) }
+        }
+        return order.map { ep in Episode(ep: ep, exercises: t.exercises.filter { $0.ep == ep }.sorted { $0.t < $1.t }) }
+    }
+
+    var body: some View {
+        List {
+            if videos.folderName == nil {
+                Section {
+                    Text("还没有指定课程视频文件夹。在「设置」里选择后，这里的每一集都能直接播放。").font(.callout)
+                    VideoFolderSetting()
+                }
+            }
+            ForEach(episodes) { item in
+                Section {
+                    ForEach(item.exercises) { e in
+                        chapterRow(e)
+                    }
+                } header: {
+                    Text("Ep. \(item.ep)" + (item.exercises.first.flatMap { videos.title(for: $0) }.map { " · \($0)" } ?? ""))
+                        .textCase(nil)
+                }
+            }
+        }
+        .navigationTitle("\(model.teacher.name)的课程视频")
+        .sheet(isPresented: Binding(get: { playing != nil }, set: { if !$0 { playing = nil } })) {
+            if let p = playing { CourseVideoPlayer(exercise: p.exercise, file: p.file) }
+        }
+    }
+
+    @ViewBuilder
+    private func chapterRow(_ e: Exercise) -> some View {
+        let label = HStack {
+            Text(Course.mmss(e.t)).monospacedDigit().foregroundStyle(.secondary)
+            Text(e.name)
+            Spacer()
+            Text(e.syl).font(.caption.monospaced()).foregroundStyle(.secondary)
+        }
+        if let file = videos.file(for: e) {
+            Button { playing = (e, file) } label: {
+                HStack { Image(systemName: "play.fill").foregroundStyle(.tint); label }
+            }
+            .buttonStyle(.borderless)
+        } else if let url = e.videoURL {
+            Link(destination: url) {
+                HStack { Image(systemName: "safari").foregroundStyle(.secondary); label }
+            }
+        } else {
+            label
+        }
+    }
+}
+
+/// Opens the list of course videos.
+struct CourseVideosButton: View {
+    @State private var showing = false
+
+    var body: some View {
+        Button { showing = true } label: { Label("全部课程视频", systemImage: "film.stack") }
+            .sheet(isPresented: $showing) {
+                NavigationStack {
+                    CourseVideosView()
+                        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { showing = false } } }
+                }
+                #if os(macOS)
+                .frame(minWidth: 560, minHeight: 600)
+                #endif
+            }
+    }
+}
+
 /// The exercises of the same episode, in video order: places to jump to.
 private func jumpPoints(_ exercise: Exercise) -> [Exercise] {
     Course.teacher(exercise.teacher).exercises
@@ -224,12 +330,9 @@ struct SettingsView: View {
             Section {
                 VideoFolderSetting()
             } header: {
-                Text("课程视频")
-            }
-            Section {
-                CoursePackImport()
-            } header: {
-                Text("原声示范")
+                Text("课程视频和原声示范")
+            } footer: {
+                Text("一个文件夹放两位老师的全部视频即可。每个练习、今日练习的每一步、课程视频列表里都能直接打开对应视频跟着练；文件夹里有 clips.py 生成的 demo-pack 时，练习的示范自动换成老师原声，不用逐个导入。")
             }
             Section {
                 Text("钢琴采样来自 FluidR3 GM 音色库（Frank Wen，CC BY 3.0）。")
@@ -290,13 +393,14 @@ struct VideoFolderSetting: View {
 
     private var status: String {
         guard let name = videos.folderName else {
-            return "应用不带视频。选择存放课程视频的文件夹（例如 tools/course/media，所有老师的视频放在一起即可），练习里就能直接打开对应视频跟着练，并跳到这个练习的位置。"
+            return "应用不带视频。选择存放课程视频的文件夹（例如 tools/course/media），之后所有练习都能直接打开对应视频，从这个练习的位置开始跟着练。"
         }
         if videos.scanning { return "正在查找「\(name)」里的视频…" }
         let lines = Course.teachers.map { t -> String in
             let r = videos.found(t)
             return r.total == 0 ? "\(t.name)：练习还没对应到视频" : "\(t.name)：\(r.found)/\(r.total) 集"
         }
-        return "「\(name)」：" + lines.joined(separator: "；") + "。没找到的集仍然打开网站。"
+        let demos = videos.demoClips > 0 ? "老师原声示范 \(videos.demoClips) 个练习。" : ""
+        return "「\(name)」：" + lines.joined(separator: "；") + "。" + demos + "没找到的集仍然打开网站。"
     }
 }

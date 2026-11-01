@@ -79,6 +79,10 @@ struct TodayView: View {
             }
 
             Section {
+                CourseVideosButton()
+            }
+
+            Section {
                 if plan.week + 1 < Course.weeks.count {
                     Button {
                         confirmAdvance = true
@@ -184,8 +188,11 @@ struct StepRow: View {
     let done: Bool
 
     var body: some View {
-        if step.exercise != nil {
-            NavigationLink(value: step) { content }
+        if let id = step.exercise {
+            HStack {
+                NavigationLink(value: step) { content }
+                if let ex = Course.byID[id] { VideoQuickButton(exercise: ex) }
+            }
         } else {
             HStack {
                 content

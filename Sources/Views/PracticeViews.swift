@@ -45,6 +45,9 @@ struct CourseSidebar: View {
             } footer: {
                 Text("在「设置」里切换老师、指定课程视频文件夹。")
             }
+            Section {
+                CourseVideosButton()
+            }
             Section("每日热身") {
                 ForEach(Course.warmup, id: \.self) { id in
                     if let ex = Course.byID[id] {
@@ -107,6 +110,7 @@ struct ExerciseRow: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
+            VideoQuickButton(exercise: exercise)
             VStack(alignment: .trailing, spacing: 2) {
                 Text(exercise.syl).font(.system(.caption, design: .monospaced).weight(.semibold)).foregroundStyle(.tint)
                 if let last = model.last(of: exercise.id) {
@@ -387,34 +391,6 @@ struct PracticeSettingsView: View {
     }
 }
 
-/// Imports the demo pack cut from the course videos by tools/course/clips.py.
-struct CoursePackImport: View {
-    @State private var picking = false
-    @State private var message: String? = nil
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Button {
-                picking = true
-            } label: {
-                Label("导入课程原声示范", systemImage: "square.and.arrow.down.on.square")
-            }
-            .buttonStyle(.borderless)
-            Text(message ?? "选择用 tools/course/clips.py 生成的 demo-pack 文件夹，每个练习的示范会换成课程里 Justin 的原声，并自动移到每个调。")
-                .font(.caption).foregroundStyle(.secondary)
-        }
-        .fileImporter(isPresented: $picking, allowedContentTypes: [.folder]) { res in
-            guard case .success(let url) = res else { return }
-            do {
-                let r = try DemoStore.shared.importPack(folder: url)
-                message = "已导入 \(r.imported.count) 个练习的原声示范" + (r.failed.isEmpty ? "。" : "，\(r.failed.count) 个没导入成功。") + "重新打开练习即可使用。"
-            } catch {
-                message = "这个文件夹里没有找到 manifest.json。请选择 clips.py 生成的 demo-pack 文件夹。"
-            }
-        }
-    }
-}
-
 /// Record or import a sung demo for this exercise; it replaces the piano demo and is moved to every key.
 struct DemoPanel: View {
     @Environment(AppModel.self) private var model
@@ -454,7 +430,7 @@ struct DemoPanel: View {
                 Button { importing = true } label: { Label("导入音频", systemImage: "square.and.arrow.down") }
                     .buttonStyle(.bordered)
                     .disabled(busy)
-                if session.demo != nil {
+                if session.demo != nil && !DemoStore.shared.isFromFolder(session.exercise.id) {
                     Button(role: .destructive) { confirmDelete = true } label: { Label("删除", systemImage: "trash") }
                         .buttonStyle(.bordered)
                         .disabled(busy)

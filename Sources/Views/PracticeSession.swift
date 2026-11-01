@@ -225,8 +225,9 @@ final class PracticeSession {
 
     func deleteDemo() {
         DemoStore.shared.delete(id: exercise.id)
-        demo = nil
-        notice = "已删除你的示范，示范改回钢琴。"
+        // a clip from the video folder's demo pack takes over again when there is one
+        demo = DemoStore.shared.info(for: exercise.id)
+        notice = demo == nil ? "已删除你的示范，示范改回钢琴。" : "已删除你的示范，示范改回视频文件夹里的老师原声。"
     }
 
     /// Text and kind for the phase pill at a given moment.

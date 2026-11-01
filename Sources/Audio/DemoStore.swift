@@ -24,11 +24,67 @@ private struct PackEntry: Decodable {
     let pattern: String?
 }
 
-/// Stores demos under Application Support/demos and renders them in other keys.
+/// Stores demos under Application Support/demos and renders them in other keys. A demo the user recorded
+/// or imported wins; otherwise a clip from a demo pack inside the course video folder is used directly.
 final class DemoStore {
     static let shared = DemoStore()
 
     private init() {}
+
+    /// Clips of the demo packs (tools/course/clips.py) found in the course video folder, by exercise.
+    private var folderClips: [String: (url: URL, entry: PackEntry)] = [:]
+    private var folderInfo: [String: DemoInfo] = [:]
+    private let packLock = NSLock()
+
+    /// Use the demo packs found in the video folder: each manifest.json lists one clip per exercise.
+    /// Only clips that sing the exercise's whole pattern are used. Returns how many exercises got one.
+    @discardableResult
+    func useFolderPacks(_ manifests: [URL]) -> Int {
+        var found: [String: (url: URL, entry: PackEntry)] = [:]
+        for m in manifests {
+            guard let data = try? Data(contentsOf: m),
+                  let entries = try? JSONDecoder().decode([String: PackEntry].self, from: data) else { continue }
+            let dir = m.deletingLastPathComponent()
+            for (id, e) in entries {
+                guard let p = Course.byID[id]?.pattern, let j = e.pattern, Jianpu.matches(j, pattern: p) else { continue }
+                found[id] = (dir.appendingPathComponent(e.file), e)
+            }
+        }
+        packLock.lock()
+        folderClips = found
+        folderInfo = [:]
+        packLock.unlock()
+        return found.count
+    }
+
+    /// True when the exercise's demo comes from the video folder (not one the user saved).
+    func isFromFolder(_ id: String) -> Bool {
+        packLock.lock()
+        defer { packLock.unlock() }
+        return !FileManager.default.fileExists(atPath: audioURL(id).path) && folderClips[id] != nil
+    }
+
+    private func folderAudio(_ id: String) -> ([Float], Double)? {
+        packLock.lock()
+        let clip = folderClips[id]
+        packLock.unlock()
+        guard let clip, let decoded = try? Self.decodeMono(clip.url) else { return nil }
+        return (Self.trimSilence(decoded.0, rate: decoded.1), decoded.1)
+    }
+
+    private func folderDemoInfo(_ id: String) -> DemoInfo? {
+        packLock.lock()
+        let cached = folderInfo[id], clip = folderClips[id]
+        packLock.unlock()
+        if let cached { return cached }
+        guard let clip, let audio = folderAudio(id) else { return nil }
+        let e = clip.entry
+        let info = DemoInfo(root: e.root, bpm: e.bpm, duration: Double(audio.0.count) / audio.1, imported: true, courseEpisode: e.ep)
+        packLock.lock()
+        folderInfo[id] = info
+        packLock.unlock()
+        return info
+    }
 
     private var dir: URL {
         let d = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("demos")
@@ -43,7 +99,7 @@ final class DemoStore {
         if let data = try? Data(contentsOf: infoURL(id)), let info = try? JSONDecoder().decode(DemoInfo.self, from: data) {
             return info
         }
-        return nil
+        return folderDemoInfo(id)
     }
 
     func setInfo(_ info: DemoInfo, for id: String) {
@@ -69,35 +125,10 @@ final class DemoStore {
 
     func load(id: String) -> (samples: [Float], rate: Double, info: DemoInfo)? {
         guard let info = info(for: id) else { return nil }
-        guard let x = try? Self.decodeMono(audioURL(id)) else { return nil }
-        return (x.0, x.1, info)
-    }
-
-    /// Import a demo pack folder (manifest.json plus one clip per exercise). Returns how many demos were imported.
-    func importPack(folder: URL) throws -> (imported: [String], failed: [String]) {
-        let scoped = folder.startAccessingSecurityScopedResource()
-        defer { if scoped { folder.stopAccessingSecurityScopedResource() } }
-        let data = try Data(contentsOf: folder.appendingPathComponent("manifest.json"))
-        let entries = try JSONDecoder().decode([String: PackEntry].self, from: data)
-        var ok: [String] = [], failed: [String] = []
-        for (id, e) in entries.sorted(by: { $0.key < $1.key }) {
-            // only clips that sing the exercise's whole pattern
-            guard let p = Course.byID[id]?.pattern, let j = e.pattern, Jianpu.matches(j, pattern: p) else {
-                if Course.byID[id] != nil { failed.append(id) }
-                continue
-            }
-            do {
-                let (raw, rate) = try Self.decodeMono(folder.appendingPathComponent(e.file))
-                let x = Self.trimSilence(raw, rate: rate)
-                guard Double(x.count) / rate > 0.3 else { failed.append(id); continue }
-                let info = DemoInfo(root: e.root, bpm: e.bpm, duration: Double(x.count) / rate, imported: true, courseEpisode: e.ep)
-                try save(id: id, samples: x, rate: rate, info: info)
-                ok.append(id)
-            } catch {
-                failed.append(id)
-            }
-        }
-        return (ok, failed)
+        // a corrected root saved for a folder clip has an info file but no audio of its own
+        if let x = try? Self.decodeMono(audioURL(id)) { return (x.0, x.1, info) }
+        if let x = folderAudio(id) { return (x.0, x.1, info) }
+        return nil
     }
 
     // MARK: audio helpers

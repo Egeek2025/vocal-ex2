@@ -221,7 +221,7 @@ def main():
             print(f"{label}：" + "；".join(report[key]))
     if report["rejected"]:
         print("没通过的可以换一遍再试，例如：--only 练习id --take 2，或加大 --pad。")
-    print("在应用里点「导入课程原声示范」，选择这个文件夹。片段只留在你自己的设备上，不要提交到仓库。")
+    print("demo-pack 在 tools/course/media 里：应用「设置」里的课程视频文件夹选 tools/course/media，就会自动使用。片段只留在你自己的设备上，不要提交到仓库。")
 
 
 if __name__ == "__main__":

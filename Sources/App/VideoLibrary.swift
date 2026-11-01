@@ -13,6 +13,10 @@ final class VideoLibrary {
     private(set) var folderName: String?
     /// video id -> video file
     private(set) var files: [String: URL] = [:]
+    /// video id -> title, from the .info.json the download tools save next to each video
+    private(set) var titles: [String: String] = [:]
+    /// exercises that got a teacher's demo clip from a demo pack in the folder
+    private(set) var demoClips = 0
     private(set) var scanning = false
 
     private var folder: URL?
@@ -44,6 +48,8 @@ final class VideoLibrary {
         UserDefaults.standard.removeObject(forKey: key)
         folderName = nil
         files = [:]
+        titles = [:]
+        demoClips = DemoStore.shared.useFolderPacks([])
     }
 
     func rescan() {
@@ -83,20 +89,28 @@ final class VideoLibrary {
         scanning = true
         let ids = Set(Course.teachers.flatMap { $0.videos.values.map(Teacher.plainID) })
         Task.detached(priority: .utility) {
-            let found = Self.scan(url, ids: ids)
+            let r = Self.scan(url, ids: ids)
+            let clips = DemoStore.shared.useFolderPacks(r.manifests)
             await MainActor.run {
-                self.files = found
+                self.files = r.files
+                self.titles = r.titles
+                self.demoClips = clips
                 self.scanning = false
             }
         }
     }
 
-    private static func scan(_ root: URL, ids: Set<String>) -> [String: URL] {
-        var found: [String: URL] = [:]
+    /// Everything the app uses from the folder: videos by id, their titles, and demo pack manifests.
+    private static func scan(_ root: URL, ids: Set<String>) -> (files: [String: URL], titles: [String: String], manifests: [URL]) {
+        var found: [String: URL] = [:], titles: [String: String] = [:], manifests: [URL] = []
         let keys: [URLResourceKey] = [.isRegularFileKey]
         guard let walk = FileManager.default.enumerator(at: root, includingPropertiesForKeys: keys,
-                                                        options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { return [:] }
+                                                        options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { return ([:], [:], []) }
         for case let url as URL in walk {
+            if url.lastPathComponent == "manifest.json" {
+                manifests.append(url)
+                continue
+            }
             guard extensions.contains(url.pathExtension.lowercased()) else { continue }
             let name = url.deletingPathExtension().lastPathComponent
             if ids.contains(name) {
@@ -105,6 +119,16 @@ final class VideoLibrary {
                 found[id] = url
             }
         }
-        return found
+        for (id, url) in found {
+            let info = url.deletingLastPathComponent().appendingPathComponent("\(id).info.json")
+            if let data = try? Data(contentsOf: info),
+               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let title = obj["title"] as? String {
+                titles[id] = title
+            }
+        }
+        return (found, titles, manifests)
     }
+
+    func title(for exercise: Exercise) -> String? { exercise.videoID.flatMap { titles[$0] } }
 }
