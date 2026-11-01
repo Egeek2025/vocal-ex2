@@ -99,6 +99,24 @@ final class CourseTests: XCTestCase {
         }
     }
 
+    func testPeoPatternsFoundInHerVideos() {
+        // tools/course/discover.py on her lessons: pattern (semitones) sung key after key
+        let expected: [String: [Int]] = [
+            "peo.scale": [0, 2, 4, 5, 7, 5, 4, 2, 0], "peo.321": [4, 2, 0], "peo.voice": [7, 5, 4, 2, 0],
+            "peo.arp8": [0, 4, 7, 12, 7, 4, 0], "peo.loose": [0, 4, 7, 12, 7, 4, 0], "peo.oct": [0, 12, 0],
+            "peo.yan": [0, 4, 7, 4, 0], "peo.weak": [0, 4, 7, 12, 7, 4, 0], "peo.weakoct": [12, 0],
+        ]
+        for (id, semis) in expected {
+            let ex = Course.byID[id]!
+            XCTAssertTrue(ex.verified, id)
+            XCTAssertEqual(ex.pattern!.steps.filter { !$0.ns }.map { $0.s }, semis, id)
+            XCTAssertNotNil(ex.videoURL, id)
+        }
+        // the weak-mix arpeggio holds its top note
+        XCTAssertEqual(Course.byID["peo.weak"]!.pattern!.steps[3].b, 4)
+        XCTAssertTrue(Course.peo.exercises.allSatisfy { $0.videoID != nil })
+    }
+
     func testBilibiliVideoLinks() {
         let t = Teacher(id: "x", name: "", about: "", platform: .bilibili, home: Course.peo.home, exercises: [],
                         warmup: [], weeks: [], stageNames: [:], checks: [], videos: [1: "BV1xx411c7mD"], cueChord: [], hasPrograms: false)

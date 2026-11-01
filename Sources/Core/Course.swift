@@ -167,6 +167,27 @@ enum Course {
         ], bpm: 80),
         "lalala": Pattern(name: "五音音阶（换辅音）", steps: deg([1, 2, 3, 4, 5, 4, 3, 2, 1], 1, 2, labels: ["LA", "LE", "LI", "LO", "LU", "LO", "LI", "LE", "LA"]), bpm: 100),
         "vowels": Pattern(name: "同一音高五个元音", steps: ["EE", "OH", "OO", "AY", "AH"].map { Step(s: 0, b: 3, j: "1", l: $0) }, bpm: 80, fixed: true),
+        // Peo 老师's patterns, as tools/course/discover.py found them in her videos
+        "p321": Pattern(name: "3-2-1 下行", steps: deg([3, 2, 1], 1, 2), bpm: 120),
+        "p181": Pattern(name: "1-8-1 八度跳", steps: deg([1, 8, 1], 1, 2), bpm: 64),
+        "p81": Pattern(name: "8-1 八度下行", steps: deg([8, 1], 1, 2), bpm: 60),
+        "p12321": Pattern(name: "1-2-3-2-1", steps: deg([1, 2, 3, 2, 1], 1, 2), bpm: 120),
+        "arp8hold": Pattern(name: "八度琶音（顶音延长）", steps: {
+            var s = deg([1, 3, 5, 8, 5, 3, 1], 1, 2)
+            s[3].b = 4
+            return s
+        }(), bpm: 110),
+        "glide131": Pattern(name: "1-3-1 滑音", steps: [
+            Step(s: 0, b: 1, j: "1"),
+            Step(s: 0, b: 1.5, j: "↗", g: 4, ns: true),
+            Step(s: 4, b: 1, j: "3"),
+            Step(s: 4, b: 1.5, j: "↘", g: 0, ns: true),
+            Step(s: 0, b: 1.5, j: "1"),
+        ], bpm: 90),
+        "blues": Pattern(name: "1-♭3-4-♭3-1 布鲁斯音", steps: [
+            Step(s: 0, b: 1, j: "1"), Step(s: 3, b: 1, j: "♭3"), Step(s: 5, b: 1.5, j: "4"),
+            Step(s: 3, b: 1, j: "♭3"), Step(s: 0, b: 2, j: "1"),
+        ], bpm: 100),
     ]
 
     static let videoIDs: [Int: String] = [
