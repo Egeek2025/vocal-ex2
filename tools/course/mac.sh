@@ -55,7 +55,7 @@ case "${1:-help}" in
       else
         arch=amd64
         [ "$(uname -m)" = arm64 ] && arch=arm64
-        echo "Homebrew 装不了 ffmpeg，改为下载静态版 ffmpeg 和 ffprobe（macOS $arch）到 tools/course/.bin"
+        echo "Homebrew 装不了 ffmpeg，改为下载静态版 ffmpeg 和 ffprobe（macOS ${arch}）到 tools/course/.bin"
         mkdir -p tools/course/.bin
         for tool in ffmpeg ffprobe; do
           curl -fL --retry 3 -o "tools/course/.bin/$tool.zip" \
@@ -99,7 +99,7 @@ case "${1:-help}" in
     need_venv
     echo "== YouTube（Justin Stoney）"
     if curl -sS -m 10 -o /dev/null ${PROXY:+-x "$PROXY"} https://www.youtube.com; then
-      echo "能连上 YouTube${PROXY:+（通过代理 $PROXY）}"
+      echo "能连上 YouTube${PROXY:+（通过代理 ${PROXY}）}"
     else
       echo "连不上 YouTube。设置代理再试，例如：PROXY=http://127.0.0.1:7890 tools/course/mac.sh check"
     fi
@@ -134,7 +134,7 @@ case "${1:-help}" in
 
   size)
     n=$( { find "$VOCAL_MEDIA" -name '*.mp4' ! -name '*.converting.mp4' 2>/dev/null || true; } | wc -l | tr -d ' ')
-    echo "$VOCAL_MEDIA：$n 个视频，$(du -sh "$VOCAL_MEDIA" 2>/dev/null | cut -f1)"
+    echo "${VOCAL_MEDIA}：$n 个视频，$(du -sh "$VOCAL_MEDIA" 2>/dev/null | cut -f1)"
     echo "在应用「设置」里选择这个文件夹；以后新下载了视频，在设置里点「重新查找」。"
     ;;
 

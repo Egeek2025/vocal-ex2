@@ -88,7 +88,7 @@ case "${1:-help}" in
       exit 1
     fi
     best=$(echo "$formats" | grep -oE '[0-9]{3,4}x[0-9]{3,4}' | awk -Fx '{print $2}' | sort -n | tail -1)
-    echo "这个视频能拿到的最高分辨率：${best:-未知}p（$url）"
+    echo "这个视频能拿到的最高分辨率：${best:-未知}p（${url}）"
     if [ -n "$best" ] && [ "$best" -ge 1080 ]; then
       echo "登录有效，可以下载 1080p。接着运行：tools/course/peo.sh list"
     else
