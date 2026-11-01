@@ -13,10 +13,21 @@
 # 登录：先在 Chrome 里登录 bilibili.com。Chrome 用的不是默认账户时，在 chrome://version 看「个人资料路径」
 # 最后一段，例如：BROWSER="chrome:Profile 1" tools/course/peo.sh download
 # 用 Chromium：BROWSER=chromium。登录信息只在本机读取，用完即止，不会保存或上传。
+#
+# 连不上 api.bilibili.com（超时）时：
+#   DIRECT=1 tools/course/peo.sh check     # 不走终端里设置的代理（为 YouTube 设的代理常常连不上 B 站）
+#   IPV4=1   tools/course/peo.sh check     # 只用 IPv4（IPv6 线路不通时）
+#   PROXY=http://127.0.0.1:7890 ...        # 指定一个能访问 B 站的代理
 set -euo pipefail
 cd "$(dirname "$0")/../.."          # repository root
 PY=tools/course/.venv/bin/python
 BROWSER="${BROWSER:-chrome}"
+
+# network options shared by every yt-dlp call
+NET=()
+if [ -n "${PROXY:-}" ]; then NET+=(--proxy "$PROXY"); elif [ -n "${DIRECT:-}" ]; then NET+=(--proxy ""); fi
+[ -n "${IPV4:-}" ] && NET+=(--ipv4)
+if [ -n "${DIRECT:-}" ]; then unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY; fi
 MATCH_DEFAULT="练声|发声|音阶|练习|气息|呼吸|混声|高音|头声|真声|假声|换声|共鸣|咬字|颤音|转音|SLS|热身|开嗓"
 SAMPLE_URL="https://space.bilibili.com/3546774224505365/video"
 
@@ -38,12 +49,15 @@ case "${1:-help}" in
     need_venv
     echo "用 $BROWSER 的登录状态读取一个 Peo 老师的视频，看能拿到的最高分辨率…"
     # the newest video of the channel
-    url=$("$PY" -m yt_dlp --cookies-from-browser "$BROWSER" --flat-playlist --playlist-items 1 --print url "$SAMPLE_URL" 2>/dev/null | head -1 || true)
+    ytnet=()
+    if [ -n "${PROXY:-}" ]; then ytnet+=(--proxy "$PROXY"); elif [ -n "${DIRECT:-}" ]; then ytnet+=(--proxy ""); fi
+    [ -n "${IPV4:-}" ] && ytnet+=(--force-ipv4)
+    url=$("$PY" -m yt_dlp "${ytnet[@]}" --cookies-from-browser "$BROWSER" --socket-timeout 20 --flat-playlist --playlist-items 1 --print url "$SAMPLE_URL" 2>/dev/null | head -1 || true)
     if [ -z "$url" ]; then
-      echo "没有拿到视频列表。检查网络；或者 Chrome 账户不是默认的，用 BROWSER=\"chrome:Profile 1\" 再试。"
+      echo "没有拿到视频列表。连接超时的话，试试 DIRECT=1（不走代理）或 IPV4=1；Chrome 账户不是默认的，用 BROWSER=\"chrome:Profile 1\"。"
       exit 1
     fi
-    formats=$("$PY" -m yt_dlp --cookies-from-browser "$BROWSER" -F "$url" 2>&1 || true)
+    formats=$("$PY" -m yt_dlp "${ytnet[@]}" --cookies-from-browser "$BROWSER" -F "$url" 2>&1 || true)
     if echo "$formats" | grep -qiE "could not (find|decrypt)|failed to decrypt|keyring|cookie.*(error|locked)"; then
       echo "$formats" | grep -iE "cookie|keyring|decrypt" | head -5
       echo
@@ -62,20 +76,20 @@ case "${1:-help}" in
 
   list)
     need_venv
-    "$PY" tools/course/fetch.py --teacher peo --list --cookies-from-browser "$BROWSER"
+    "$PY" tools/course/fetch.py --teacher peo --list --cookies-from-browser "$BROWSER" "${NET[@]}"
     ;;
 
   download)
     need_venv
     match="${2:-$MATCH_DEFAULT}"
     echo "下载标题匹配「$match」的视频（1080p，已下载的会跳过）"
-    "$PY" tools/course/fetch.py --teacher peo --match "$match" --cookies-from-browser "$BROWSER"
+    "$PY" tools/course/fetch.py --teacher peo --match "$match" --cookies-from-browser "$BROWSER" "${NET[@]}"
     ;;
 
   ids)
     need_venv
     [ -n "${2:-}" ] || { echo "用法：tools/course/peo.sh ids BV1xx,BV1yy"; exit 1; }
-    "$PY" tools/course/fetch.py --teacher peo --ids "$2" --cookies-from-browser "$BROWSER"
+    "$PY" tools/course/fetch.py --teacher peo --ids "$2" --cookies-from-browser "$BROWSER" "${NET[@]}"
     ;;
 
   analyze)

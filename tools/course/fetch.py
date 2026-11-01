@@ -44,7 +44,7 @@ def main():
                     help="使用这个浏览器的登录状态，例如 firefox、chrome、chromium。"
                          "YouTube 要求验证时需要；Bilibili 不登录最高只有 480p/720p，登录后才有 1080p")
     ap.add_argument("--proxy", help="通过代理下载，例如 http://127.0.0.1:7890 或 socks5://127.0.0.1:1080；"
-                                    "浏览器能打开但这里连不上时，用浏览器正在用的代理")
+                                    "浏览器能打开但这里连不上时，用浏览器正在用的代理；--proxy \"\" 表示不走任何代理直接连接")
     ap.add_argument("--timeout", type=int, default=60, help="连接和读取超时（秒），默认 60")
     ap.add_argument("--ipv4", action="store_true", help="只用 IPv4 连接（IPv6 线路不通时常见的读取超时）")
     ap.add_argument("--chunk-size", default="10M", help="每次请求下载多大一段，默认 10M，和浏览器一样分段下载；设为 0 关闭")
@@ -123,8 +123,8 @@ def main():
 
 def network_args(a):
     out = ["--socket-timeout", str(a.timeout)]
-    if a.proxy:
-        out += ["--proxy", a.proxy]
+    if a.proxy is not None:
+        out += ["--proxy", a.proxy]   # an empty value means connect directly, ignoring proxy settings
     if a.ipv4:
         out += ["--force-ipv4"]
     if a.chunk_size and a.chunk_size != "0":
