@@ -31,6 +31,7 @@ struct CourseSidebar: View {
         let week = Course.weeks[model.week]
         List(selection: $selection) {
             Section {
+                TeacherPicker()
                 Picker("声部", selection: Binding(get: { model.voiceKey }, set: { model.setVoice($0) })) {
                     ForEach(0..<VoiceRange.presets.count, id: \.self) { i in
                         Text(VoiceRange.presets[i].range.name).tag(VoiceRange.presets[i].key)

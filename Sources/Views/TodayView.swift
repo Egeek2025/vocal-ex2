@@ -14,7 +14,8 @@ struct TodayView: View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("\(model.teacher.name) · \(model.teacher.about)").font(.caption).foregroundStyle(.secondary)
+                    TeacherPicker()
+                    Text(model.teacher.about).font(.caption).foregroundStyle(.secondary)
                     HStack(alignment: .firstTextBaseline) {
                         Text("第 \(plan.week + 1) 周").font(.title2.weight(.bold))
                         Text("阶段 \(info.stage) · \(Course.stageNames[info.stage] ?? "")")

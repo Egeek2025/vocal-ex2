@@ -451,6 +451,21 @@ struct SettingsView: View {
     }
 }
 
+/// Switches the teacher right where the course is shown; each teacher keeps their own progress.
+struct TeacherPicker: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        Picker("老师", selection: Binding(get: { model.teacherID }, set: { model.setTeacher($0) })) {
+            ForEach(Course.teachers) { t in
+                Text(t.name).tag(t.id)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+    }
+}
+
 /// Toolbar button that opens the settings.
 struct SettingsButton: View {
     @State private var showing = false
