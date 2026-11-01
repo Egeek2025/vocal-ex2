@@ -1,6 +1,12 @@
 import Foundation
 import Observation
 
+/// A chapter of a course video as its uploader marked it (from the downloaded .info.json).
+struct VideoChapter: Hashable {
+    let title: String
+    let start: Double
+}
+
 /// Course videos kept on the user's own disk, for every teacher. The app ships without them; the user
 /// points it at one folder once (for example tools/course/media, where fetch.py saves media/<id>/<id>.mp4)
 /// and it is remembered. A file belongs to an episode when its name contains that episode's video id
@@ -13,8 +19,10 @@ final class VideoLibrary {
     private(set) var folderName: String?
     /// video id -> video file
     private(set) var files: [String: URL] = [:]
-    /// video id -> title, from the .info.json the download tools save next to each video
+    /// video id -> title, chapters and length, from the .info.json the download tools save next to each video
     private(set) var titles: [String: String] = [:]
+    private(set) var chapters: [String: [VideoChapter]] = [:]
+    private(set) var durations: [String: Double] = [:]
     /// exercises that got a teacher's demo clip from a demo pack in the folder
     private(set) var demoClips = 0
     private(set) var scanning = false
@@ -49,6 +57,8 @@ final class VideoLibrary {
         folderName = nil
         files = [:]
         titles = [:]
+        chapters = [:]
+        durations = [:]
         demoClips = DemoStore.shared.useFolderPacks([])
     }
 
@@ -94,18 +104,29 @@ final class VideoLibrary {
             await MainActor.run {
                 self.files = r.files
                 self.titles = r.titles
+                self.chapters = r.chapters
+                self.durations = r.durations
                 self.demoClips = clips
                 self.scanning = false
             }
         }
     }
 
-    /// Everything the app uses from the folder: videos by id, their titles, and demo pack manifests.
-    private static func scan(_ root: URL, ids: Set<String>) -> (files: [String: URL], titles: [String: String], manifests: [URL]) {
-        var found: [String: URL] = [:], titles: [String: String] = [:], manifests: [URL] = []
+    private struct ScanResult {
+        var files: [String: URL] = [:]
+        var titles: [String: String] = [:]
+        var chapters: [String: [VideoChapter]] = [:]
+        var durations: [String: Double] = [:]
+        var manifests: [URL] = []
+    }
+
+    /// Everything the app uses from the folder: videos by id, their titles and chapters, and demo pack manifests.
+    private static func scan(_ root: URL, ids: Set<String>) -> ScanResult {
+        var found: [String: URL] = [:], manifests: [URL] = []
+        var r = ScanResult()
         let keys: [URLResourceKey] = [.isRegularFileKey]
         guard let walk = FileManager.default.enumerator(at: root, includingPropertiesForKeys: keys,
-                                                        options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { return ([:], [:], []) }
+                                                        options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { return r }
         for case let url as URL in walk {
             if url.lastPathComponent == "manifest.json" {
                 manifests.append(url)
@@ -121,14 +142,22 @@ final class VideoLibrary {
         }
         for (id, url) in found {
             let info = url.deletingLastPathComponent().appendingPathComponent("\(id).info.json")
-            if let data = try? Data(contentsOf: info),
-               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let title = obj["title"] as? String {
-                titles[id] = title
+            guard let data = try? Data(contentsOf: info),
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+            r.titles[id] = obj["title"] as? String
+            r.durations[id] = (obj["duration"] as? NSNumber)?.doubleValue
+            let list = (obj["chapters"] as? [[String: Any]] ?? []).compactMap { c -> VideoChapter? in
+                guard let t = c["title"] as? String, let start = (c["start_time"] as? NSNumber)?.doubleValue else { return nil }
+                return VideoChapter(title: t, start: start)
             }
+            if !list.isEmpty { r.chapters[id] = list }
         }
-        return (found, titles, manifests)
+        r.files = found
+        r.manifests = manifests
+        return r
     }
 
     func title(for exercise: Exercise) -> String? { exercise.videoID.flatMap { titles[$0] } }
+    func chapters(for exercise: Exercise) -> [VideoChapter] { exercise.videoID.flatMap { chapters[$0] } ?? [] }
+    func duration(for exercise: Exercise) -> Double? { exercise.videoID.flatMap { durations[$0] } }
 }

@@ -7,7 +7,8 @@ struct TodayView: View {
 
     var body: some View {
         let plan = model.todayPlan
-        let info = Course.weeks[plan.week]
+        let weeks = model.teacher.weeks
+        let info = weeks[min(max(0, plan.week), weeks.count - 1)]
         let progress = Routine.progress(week: plan.week, summary: model.summary)
         let doneCount = plan.steps.filter { model.isDone($0) }.count
         let next = plan.steps.first { !model.isDone($0) }
@@ -84,7 +85,7 @@ struct TodayView: View {
             }
 
             Section {
-                if plan.week + 1 < Course.weeks.count {
+                if plan.week + 1 < weeks.count {
                     Button {
                         confirmAdvance = true
                     } label: {
@@ -94,8 +95,8 @@ struct TodayView: View {
                     Text("这是最后一周。做完结业检验后，可以把前面各周的检验项目当作长期练习。").font(.callout)
                 }
                 Picker("从某一周重新开始", selection: Binding(get: { model.courseWeek }, set: { model.startCourseWeek($0) })) {
-                    ForEach(0..<Course.weeks.count, id: \.self) { w in
-                        Text("第 \(w + 1) 周 · \(Course.weeks[w].focus)").tag(w)
+                    ForEach(Array(weeks.enumerated()), id: \.offset) { w, info in
+                        Text("第 \(w + 1) 周 · \(info.focus)").tag(w)
                     }
                 }
             } header: {

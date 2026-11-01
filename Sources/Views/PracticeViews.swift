@@ -28,7 +28,9 @@ struct CourseSidebar: View {
     @Binding var selection: String?
 
     var body: some View {
-        let week = Course.weeks[model.week]
+        // the teacher's weeks, read once per draw: the list changes length when the teacher changes
+        let weeks = model.teacher.weeks
+        let week = weeks[min(max(0, model.week), weeks.count - 1)]
         List(selection: $selection) {
             Section {
                 TeacherPicker()
@@ -42,7 +44,7 @@ struct CourseSidebar: View {
                 }
                 WeekGrid()
             } header: {
-                Text("\(model.teacher.name) · \(Course.weeks.count) 周课程")
+                Text("\(model.teacher.name) · \(weeks.count) 周课程")
             } footer: {
                 Text("在「设置」里切换老师、指定课程视频文件夹。")
             }
@@ -76,9 +78,10 @@ struct WeekGrid: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
+        // iterate the weeks themselves, never index into them: switching teacher changes how many there are
+        let weeks = Array(model.teacher.weeks.enumerated())
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 6), spacing: 6) {
-            ForEach(0..<Course.weeks.count, id: \.self) { i in
-                let w = Course.weeks[i]
+            ForEach(weeks, id: \.offset) { i, w in
                 Button {
                     model.setWeek(i)
                 } label: {

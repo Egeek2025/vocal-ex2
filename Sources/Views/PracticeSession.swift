@@ -1,6 +1,11 @@
 import Foundation
 import Observation
 
+extension Notification.Name {
+    /// posted when a practice, demo or recording starts, so course videos pause
+    static let practiceWillStart = Notification.Name("practiceWillStart")
+}
+
 /// State of one exercise screen: settings, the running plan, the exercise's recorded demo and the last result.
 @Observable
 final class PracticeSession {
@@ -68,6 +73,8 @@ final class PracticeSession {
     @MainActor
     func start(_ mode: Mode, model: AppModel) async {
         guard !running, !preparing else { return }
+        // a course video playing alongside would be heard through the microphone and talk over the piano
+        NotificationCenter.default.post(name: .practiceWillStart, object: nil)
         self.model = model
         let engine = AudioEngine.shared
         var micOK = engine.micEnabled

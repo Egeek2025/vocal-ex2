@@ -142,23 +142,36 @@ final class CourseVideo {
     var current: String
     /// why the file cannot be played, when it cannot
     var failure: String?
+    /// playback position and length in seconds, for the marker timeline
+    var time: Double = 0
+    var duration: Double = 0
     @ObservationIgnored private var status: NSKeyValueObservation?
     @ObservationIgnored private var pending: (t: Int, play: Bool)?
+    @ObservationIgnored private var timeToken: Any?
+    @ObservationIgnored private var practiceObserver: NSObjectProtocol?
 
     init(exercise: Exercise, file: URL, autoplay: Bool) {
         current = exercise.id
         pending = (exercise.t, autoplay)
         let item = AVPlayerItem(url: file)
         status = item.observe(\.status, options: [.initial, .new]) { [weak self] item, _ in
-            let s = item.status, error = item.error?.localizedDescription
-            DispatchQueue.main.async { self?.statusChanged(s, error) }
+            let s = item.status, error = item.error?.localizedDescription, d = item.duration.seconds
+            DispatchQueue.main.async { self?.statusChanged(s, error, d) }
         }
         player.replaceCurrentItem(with: item)
+        timeToken = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.5, preferredTimescale: 600), queue: .main) { [weak self] t in
+            self?.time = t.seconds
+        }
+        // starting a practice pauses the video: it would be heard through the microphone and over the piano
+        practiceObserver = NotificationCenter.default.addObserver(forName: .practiceWillStart, object: nil, queue: .main) { [weak self] _ in
+            self?.player.pause()
+        }
     }
 
-    private func statusChanged(_ s: AVPlayerItem.Status, _ error: String?) {
+    private func statusChanged(_ s: AVPlayerItem.Status, _ error: String?, _ d: Double) {
         switch s {
         case .readyToPlay:
+            if d.isFinite, d > 0 { duration = d }
             if let p = pending {
                 pending = nil
                 seek(to: p.t, play: p.play)
@@ -187,6 +200,10 @@ final class CourseVideo {
     func close() {
         status?.invalidate()
         status = nil
+        if let t = timeToken { player.removeTimeObserver(t) }
+        timeToken = nil
+        if let o = practiceObserver { NotificationCenter.default.removeObserver(o) }
+        practiceObserver = nil
         player.pause()
         player.replaceCurrentItem(with: nil)
     }
@@ -233,6 +250,77 @@ struct PlayerView: UIViewControllerRepresentable {
 }
 #endif
 
+/// A place to jump to in a course video: an exercise of the app, or a chapter the uploader marked.
+private struct VideoMarker: Identifiable {
+    let id: String
+    let time: Double
+    let title: String
+    let exercise: Exercise?
+}
+
+private func markers(_ exercise: Exercise, chapters: [VideoChapter]) -> [VideoMarker] {
+    let ex = jumpPoints(exercise).map { VideoMarker(id: "ex." + $0.id, time: Double($0.t), title: $0.name, exercise: $0) }
+    let ch = chapters.enumerated().map { VideoMarker(id: "ch.\($0.offset)", time: $0.element.start, title: $0.element.title, exercise: nil) }
+    return (ex + ch).sorted { $0.time < $1.time }
+}
+
+/// The video's length as a bar: the played part filled, a tall tick per exercise, a short one per chapter.
+/// Clicking or tapping the bar jumps there.
+private struct MarkerTimeline: View {
+    let video: CourseVideo
+    let marks: [VideoMarker]
+    let length: Double
+
+    var body: some View {
+        GeometryReader { g in
+            let w = g.size.width
+            let x: (Double) -> CGFloat = { CGFloat(min(1, max(0, $0 / max(1, length)))) * w }
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.secondary.opacity(0.18)).frame(height: 6)
+                Capsule().fill(Color.accentColor.opacity(0.5)).frame(width: x(video.time), height: 6)
+                ForEach(marks) { m in
+                    Rectangle()
+                        .fill(m.exercise == nil ? Color.secondary : Color.accentColor)
+                        .frame(width: 2, height: m.exercise == nil ? 10 : 18)
+                        .offset(x: x(m.time) - 1)
+                }
+            }
+            .frame(height: 22)
+            .contentShape(Rectangle())
+            .gesture(SpatialTapGesture().onEnded { v in
+                video.seek(to: Int(Double(v.location.x / max(1, w)) * length))
+            })
+        }
+        .frame(height: 22)
+        .accessibilityLabel("视频进度和标记")
+    }
+}
+
+/// The markers as buttons, in video order; the exercise being practised stands out.
+private struct MarkerButtons: View {
+    let video: CourseVideo
+    let marks: [VideoMarker]
+    let exercise: Exercise
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(marks) { m in
+                    let mine = m.exercise?.id == exercise.id
+                    Button {
+                        if let e = m.exercise { video.seek(e) } else { video.seek(to: Int(m.time)) }
+                    } label: {
+                        Label("\(Course.mmss(Int(m.time))) \(m.title)", systemImage: m.exercise == nil ? "bookmark" : "music.mic")
+                            .lineLimit(1)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(mine ? Color.accentColor : (m.exercise == nil ? Color.secondary : Color.primary))
+                }
+            }
+        }
+    }
+}
+
 /// The player, or why the file cannot be played.
 private struct VideoSurface: View {
     let video: CourseVideo
@@ -261,6 +349,7 @@ private struct VideoSurface: View {
 /// Plays a local course video from the exercise's place in it, with the episode's other exercises as jump points.
 struct CourseVideoPlayer: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(VideoLibrary.self) private var videos
     let exercise: Exercise
     let file: URL
     @State private var video: CourseVideo? = nil
@@ -287,6 +376,10 @@ struct CourseVideoPlayer: View {
     private func content(_ video: CourseVideo) -> some View {
             VStack(spacing: 0) {
                 VideoSurface(video: video)
+                MarkerTimeline(video: video, marks: markers(exercise, chapters: videos.chapters(for: exercise)),
+                               length: video.duration > 0 ? video.duration : (videos.duration(for: exercise) ?? 1))
+                    .padding(.horizontal)
+                    .padding(.vertical, 6)
                 List {
                     Section {
                         ForEach(jumpPoints(exercise)) { p in
@@ -296,6 +389,23 @@ struct CourseVideoPlayer: View {
                             .buttonStyle(.borderless)
                     } header: {
                         Text("这一集里的练习")
+                    }
+                    let chapters = videos.chapters(for: exercise)
+                    if !chapters.isEmpty {
+                        Section {
+                            ForEach(Array(chapters.enumerated()), id: \.offset) { _, c in
+                                Button { video.seek(to: Int(c.start)) } label: {
+                                    HStack {
+                                        Text(Course.mmss(Int(c.start))).monospacedDigit().foregroundStyle(.secondary)
+                                        Text(c.title)
+                                        Spacer()
+                                    }
+                                }
+                                .buttonStyle(.borderless)
+                            }
+                        } header: {
+                            Text("视频章节")
+                        }
                     }
                 }
             }
@@ -331,6 +441,7 @@ private struct JumpRow: View {
 /// Practise along with the course video inside the exercise: the video starts at this exercise, and with
 /// the microphone on, the note being sung shows on a keyboard as you sing with the teacher.
 struct VideoTrainingPanel: View {
+    @Environment(VideoLibrary.self) private var videos
     let exercise: Exercise
     let file: URL
     @State private var video: CourseVideo? = nil
@@ -342,16 +453,15 @@ struct VideoTrainingPanel: View {
             if let video {
                 VideoSurface(video: video)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        Button { video.seek(exercise) } label: { Label("回到本练习 \(Course.mmss(exercise.t))", systemImage: "arrow.uturn.backward") }
-                            .buttonStyle(.borderedProminent)
-                        ForEach(jumpPoints(exercise).filter { $0.id != exercise.id }) { p in
-                            Button("\(Course.mmss(p.t)) \(p.name)") { video.seek(p) }
-                                .buttonStyle(.bordered)
-                        }
-                    }
+                let marks = markers(exercise, chapters: videos.chapters(for: exercise))
+                MarkerTimeline(video: video, marks: marks,
+                               length: video.duration > 0 ? video.duration : (videos.duration(for: exercise) ?? 1))
+                HStack {
+                    Button { video.seek(exercise) } label: { Label("回到本练习 \(Course.mmss(exercise.t))", systemImage: "arrow.uturn.backward") }
+                        .buttonStyle(.borderedProminent)
+                    Text("长刻度 = 练习，短刻度 = 视频章节").font(.caption).foregroundStyle(.secondary)
                 }
+                MarkerButtons(video: video, marks: marks, exercise: exercise)
             } else {
                 ProgressView().frame(maxWidth: .infinity).aspectRatio(16 / 9, contentMode: .fit)
             }
