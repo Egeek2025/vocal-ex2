@@ -67,6 +67,9 @@ jobs:
             codesign -dv --entitlements - VocalStudio.app 2>&1 | head -20
             # the video folder is remembered with an app-scoped bookmark, which needs this entitlement
             codesign -d --entitlements - --xml VocalStudio.app 2>/dev/null | grep -q "files.bookmarks.app-scope" || { echo "::error::macOS app lacks the bookmarks entitlement"; exit 1; }
+            # the video player needs AVKit loaded; SwiftUI's VideoPlayer (_AVKit_SwiftUI) crashed on macOS 15
+            otool -L VocalStudio.app/Contents/MacOS/VocalStudio | grep -q "AVKit.framework" || { echo "::error::AVKit is not linked"; exit 1; }
+            if otool -L VocalStudio.app/Contents/MacOS/VocalStudio | grep -q "_AVKit_SwiftUI"; then echo "::error::SwiftUI VideoPlayer is back"; exit 1; fi
             ditto -c -k --keepParent VocalStudio.app "$GITHUB_WORKSPACE/VocalStudio-macOS.zip"
           fi
       - uses: actions/upload-artifact@v4
