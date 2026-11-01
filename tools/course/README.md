@@ -33,6 +33,7 @@ $PY tools/course/fetch.py --episodes 5,101 # 指定集数
 - yt-dlp 需要更新时（YouTube 改版后常见）：`tools/course/.venv/bin/python -m pip install -U "yt-dlp[default]"`。
 - 默认按 **1080p** 下载（`--max-height 1440` 或 `2160` 可以更高）。网站只给 VP9/AV1 编码时，下载完会自动转成 H.264，保证 iPhone、iPad、Mac 都能播放（`--no-recode` 跳过）。1080p 每小时视频约 1–2 GB。
 - 只做分析不看视频的话，`--audio-only` 体积小很多。
+- 以前按 480p 下载的视频（YouTube 实际给的是 360p）可以升级：`$PY tools/course/fetch.py --only-exercises --upgrade` 会删掉低于 1080p 的视频并重新下载，字幕和章节信息保留。
 
 ### 已经下载的视频转成能播放的格式
 

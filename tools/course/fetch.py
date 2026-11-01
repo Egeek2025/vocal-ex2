@@ -20,6 +20,7 @@ import json
 import shutil
 import subprocess
 import sys
+import time
 
 from common import MEDIA, OUTPUT, PLAYLIST, TEACHERS, exercises, video_ids, video_url
 import transcode
@@ -38,6 +39,8 @@ def main():
     ap.add_argument("--audio-only", action="store_true", help="只下载音频（体积小很多，分析已经够用，但应用里不能看视频）")
     ap.add_argument("--max-height", type=int, default=1080,
                     help="视频分辨率上限，默认 1080；有 1440、2160 也可以设得更高")
+    ap.add_argument("--upgrade", action="store_true",
+                    help="把以前下载的低分辨率视频（低于 --max-height）删掉重新下载，例如早先默认 480p 时下的 360p")
     ap.add_argument("--no-recode", action="store_true",
                     help="下载后不转换编码（默认会把 VP9/AV1 转成 H.264，保证 iPhone 和 Mac 都能播放）")
     ap.add_argument("--cookies-from-browser", metavar="BROWSER",
@@ -66,6 +69,9 @@ def main():
         return list_videos(ytdlp, a.teacher, common_args)
 
     MEDIA.mkdir(parents=True, exist_ok=True)
+    started = time.time()
+    if a.upgrade and not a.audio_only:
+        drop_low_resolution(a.teacher, a.max_height)
     urls = wanted_urls(a)
     if not urls:
         sys.exit("没有要下载的视频。")
@@ -115,10 +121,35 @@ def main():
         print("提示：Bilibili 不登录最高只给 480p/720p。要 1080p，加 --cookies-from-browser firefox（或你登录 B 站用的浏览器）。")
 
     if not a.audio_only and not a.no_recode:
-        transcode.convert_all(MEDIA)
+        transcode.convert_all(MEDIA, newer_than=started)   # only what this run downloaded
     nxt = "analyze.py" if youtube else "discover.py --teacher peo"
     print(f"完成。接着运行：{sys.executable} tools/course/{nxt}")
     sys.exit(rc)
+
+
+def drop_low_resolution(teacher, max_height):
+    """Delete this teacher's videos below the wanted height and forget them in the download archive,
+    so this run fetches them again. Subtitles and info files are kept."""
+    want = min(max_height, 1080) - 60
+    bili = TEACHERS[teacher]["site"] == "bilibili"
+    archive = MEDIA / "archive.txt"
+    dropped = []
+    for d in sorted(p for p in MEDIA.iterdir() if p.is_dir()):
+        if d.name.startswith("BV") != bili:
+            continue
+        for f in d.glob(f"{d.name}.*"):
+            if f.suffix.lower() not in transcode.VIDEO_EXT:
+                continue
+            _, _, h = transcode.probe(f)
+            if h and h < want:
+                print(f"  {f.name}：{h}p，删除后重新下载")
+                f.unlink()
+                dropped.append(d.name)
+    if dropped and archive.exists():
+        keep = [line for line in archive.read_text(encoding="utf-8").splitlines()
+                if not any(line.endswith(" " + vid) for vid in dropped)]
+        archive.write_text("\n".join(keep) + ("\n" if keep else ""), encoding="utf-8")
+    print(f"{len(set(dropped))} 个低分辨率视频会重新下载。" if dropped else "没有低于目标分辨率的视频。")
 
 
 def network_args(a):

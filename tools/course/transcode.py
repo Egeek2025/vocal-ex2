@@ -74,11 +74,13 @@ def files(paths):
             yield p
 
 
-def convert_all(*paths, dry_run=False, crf=20, preset="medium"):
+def convert_all(*paths, dry_run=False, crf=20, preset="medium", newer_than=None):
+    """Convert what Apple's player cannot play; with `newer_than` (a timestamp), only files written since then."""
     if not shutil.which("ffprobe"):
         print("找不到 ffprobe（随 ffmpeg 安装），跳过编码检查。")
         return
-    todo = [(f, how) for f in files(paths or [MEDIA]) if (how := plan(f))]
+    found = [f for f in files(paths or [MEDIA]) if newer_than is None or f.stat().st_mtime >= newer_than]
+    todo = [(f, how) for f in found if (how := plan(f))]
     if not todo:
         print("所有视频都能在 iPhone 和 Mac 上直接播放，不需要转换。")
         return
