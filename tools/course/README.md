@@ -46,6 +46,16 @@ $PY tools/course/transcode.py ~/Videos/某个文件夹  # 也可以转换别的�
 
 ### Peo 老师（Bilibili）
 
+最省事的方式是用 `peo.sh`，它把安装、登录检查、列表、下载、转换、分析串在一起，下载时用你 Chrome 里已经登录 B 站的状态拿 1080p：
+
+```bash
+tools/course/peo.sh setup      # 一次
+tools/course/peo.sh check      # 确认能拿到 1080p
+tools/course/peo.sh all        # 列表 + 下载练声类视频 + 分析
+```
+
+Chrome 用的不是默认账户时加 `BROWSER="chrome:Profile 1"`（在 `chrome://version` 看「个人资料路径」）。也可以分开运行，下面是对应的完整命令：
+
 ```bash
 $PY tools/course/fetch.py --teacher peo --list                                   # 先列出她的全部视频（只要标题和时长，不下载）
 $PY tools/course/fetch.py --teacher peo --match "练声|发声|音阶" --cookies-from-browser firefox   # 下载标题匹配的视频

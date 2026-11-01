@@ -1,3 +1,5 @@
 numpy>=1.26
 # "default" pulls in yt-dlp-ejs, which YouTube downloads now need (together with deno or node)
 yt-dlp[default]>=2025.11.12
+# reads the Chrome/Chromium login on Linux (fetch.py --cookies-from-browser chrome), e.g. Bilibili 1080p
+secretstorage>=3.3; sys_platform == "linux"
