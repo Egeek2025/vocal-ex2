@@ -137,7 +137,8 @@ struct ExerciseView: View {
     /// set when opened from the daily routine: what this step is for
     let step: RoutineStep?
     @State private var session: PracticeSession
-    @State private var withVideo = false
+    /// the course video sits open in the exercise unless the user closed it
+    @AppStorage("exerciseVideoOpen") private var withVideo = true
 
     init(exercise: Exercise, voice: VoiceRange, step: RoutineStep? = nil) {
         self.exercise = exercise
@@ -249,7 +250,7 @@ struct PitchPracticeView: View {
                 .pickerStyle(.menu)
                 HStack {
                     Text("速度 \(Int(session.bpm))").font(.callout.monospacedDigit()).frame(width: 80, alignment: .leading)
-                    Slider(value: $session.bpm, in: 50...140, step: 2)
+                    Slider(value: $session.bpm, in: 50...200, step: 2)
                 }
                 if !session.pattern.fixed { Toggle("上行后再下行", isOn: $session.upDown) }
                 DisclosureGroup("示范、节拍器和提示音", isExpanded: $showSettings) {
@@ -372,6 +373,9 @@ struct PracticeSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            Toggle("按视频节奏：和弦一下就唱，一个调紧接一个调", isOn: model.pref(\.courseRhythm))
+            Text("速度和调与调之间的衔接跟老师视频里一样（已核对音型的练习按视频测出的速度）。关掉后每个调前有预备拍和停顿，适合慢练。")
+                .font(.caption).foregroundStyle(.secondary)
             Picker("示范", selection: model.pref(\.demo)) {
                 ForEach(PlanOptions.Demo.allCases) { Text($0.label).tag($0.rawValue) }
             }

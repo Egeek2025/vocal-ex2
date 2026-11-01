@@ -38,7 +38,8 @@ final class PracticeSession {
         let r = Planner.defaultRoots(exercise, p, voice)
         rootA = r.0
         rootB = maxKeys.map { min(r.1, r.0 + ($0 - 1) * max(1, p.rootStep)) } ?? r.1
-        bpm = p.bpm
+        // the teacher's tempo when it was measured in the video, else the pattern's own
+        bpm = exercise.keySeconds.map { Planner.courseBPM(p, keySeconds: $0) } ?? p.bpm
         plan = Planner.build(p, roots: [r.0], options: PlanOptions(bpm: p.bpm), start: 0)
         demo = DemoStore.shared.info(for: exercise.id)
     }
@@ -56,6 +57,7 @@ final class PracticeSession {
         o.countIn = prefs.countIn
         o.metronome = prefs.metronome
         o.listenOnly = listenOnly
+        o.courseRhythm = prefs.courseRhythm
         if prefs.useRecordedDemo, let d = demo { o.demoDuration = d.duration / speed(for: d) }
         return o
     }
@@ -124,8 +126,9 @@ final class PracticeSession {
         var notes: [ToneNote] = []
         for b in plan.blocks {
             if let c = b.chord {
-                for (i, s) in Course.cueChord.enumerated() {
-                    notes.append(ToneNote(.piano, m0: Double(b.root + s), t0: c.lowerBound + Double(i) * 0.04, t1: c.upperBound, vol: 0.6 / Double(Course.cueChord.count)))
+                for s in Course.cueChord {
+                    // struck together, like the teacher's piano
+                    notes.append(ToneNote(.piano, m0: Double(b.root + s), t0: c.lowerBound, t1: c.upperBound, vol: 0.6 / Double(Course.cueChord.count)))
                 }
             }
             if let first = b.listen.first, let last = b.listen.last {

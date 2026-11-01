@@ -50,6 +50,9 @@ struct PlanOptions {
     var countIn = 2
     var metronome = true
     var listenOnly = false
+    /// keys follow each other the way the teacher does it in the video: a one-beat chord, then straight into
+    /// the singing, no count-in after the first key and no pause before the next
+    var courseRhythm = false
 }
 
 struct Plan {
@@ -153,6 +156,11 @@ enum Planner {
 
     /// Lay out a session the way a warm-up track runs: for each key a chord sets the key,
     /// the demo plays, a count-in leads in, and the singer sings over the metronome.
+    /// The tempo at which one key (a one-beat chord plus the pattern) takes as long as in the video.
+    static func courseBPM(_ p: Pattern, keySeconds: Double) -> Double {
+        min(200, max(50, (60 * (1 + p.beats) / keySeconds).rounded()))
+    }
+
     static func build(_ p: Pattern, roots: [Int], options o: PlanOptions, start: Double) -> Plan {
         let beat = 60 / o.bpm, pb = p.beats
         var t = start
@@ -161,8 +169,9 @@ enum Planner {
             let b0 = t
             var chord: ClosedRange<Double>? = nil
             if o.chordCue {
-                chord = t...(t + 2 * beat)
-                t += 2 * beat
+                let len = o.courseRhythm ? 1.0 : 2.0
+                chord = t...(t + len * beat)
+                t += len * beat
             }
             var listen: [PlannedStep] = []
             let demo = o.listenOnly || o.demo == .every || (o.demo == .first && k == 0)
@@ -180,7 +189,7 @@ enum Planner {
             if o.listenOnly {
                 s0 = t
             } else {
-                let n = k == 0 ? max(4, o.countIn) : max(1, o.countIn)
+                let n = k == 0 ? max(4, o.countIn) : (o.courseRhythm ? 0 : max(1, o.countIn))
                 countIn = (0..<n).map { t + Double($0) * beat }
                 t += Double(n) * beat
                 s0 = t
@@ -188,7 +197,7 @@ enum Planner {
                 if o.metronome { clicks = (0..<Int(pb.rounded(.up))).map { s0 + Double($0) * beat } }
                 t += pb * beat
             }
-            t += beat * 0.75
+            if !o.courseRhythm { t += beat * 0.75 }
             blocks.append(Block(root: root, t0: b0, chord: chord, listen: listen, countIn: countIn, s0: s0, sing: sing, clicks: clicks, t1: t))
         }
         return Plan(blocks: blocks, beat: beat, end: t)

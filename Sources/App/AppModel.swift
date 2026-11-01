@@ -15,8 +15,26 @@ struct PracticePrefs: Codable, Equatable {
     var accompany = false
     /// use the exercise's recorded demo when there is one
     var useRecordedDemo = true
+    /// tempo and the flow from key to key as in the teacher's video, where it was measured
+    var courseRhythm = true
 
     var demoMode: PlanOptions.Demo { PlanOptions.Demo(rawValue: demo) ?? .first }
+
+    init() {}
+
+    /// Settings saved by an older version miss newer fields; those keep their defaults.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = PracticePrefs()
+        demo = try c.decodeIfPresent(String.self, forKey: .demo) ?? d.demo
+        chordCue = try c.decodeIfPresent(Bool.self, forKey: .chordCue) ?? d.chordCue
+        countIn = try c.decodeIfPresent(Int.self, forKey: .countIn) ?? d.countIn
+        metronome = try c.decodeIfPresent(Bool.self, forKey: .metronome) ?? d.metronome
+        metronomeVolume = try c.decodeIfPresent(Double.self, forKey: .metronomeVolume) ?? d.metronomeVolume
+        accompany = try c.decodeIfPresent(Bool.self, forKey: .accompany) ?? d.accompany
+        useRecordedDemo = try c.decodeIfPresent(Bool.self, forKey: .useRecordedDemo) ?? d.useRecordedDemo
+        courseRhythm = try c.decodeIfPresent(Bool.self, forKey: .courseRhythm) ?? d.courseRhythm
+    }
 }
 
 @Observable

@@ -69,6 +69,12 @@ extension Course {
                  tip: "R&B 常用的 ♭3 和 4。先慢慢唱准每个音，再加滑音和装饰，最后才加速度。"),
     ]
 
+    /// seconds from one key to the next in her videos (discover.py: span of the takes / number of keys)
+    static let peoKeySeconds: [String: Double] = [
+        "peo.321": 5.14, "peo.arp8": 6.58, "peo.loose": 5.22, "peo.oct": 3.82, "peo.scale": 7.04,
+        "peo.voice": 6.33, "peo.weak": 5.63, "peo.weakoct": 5.33, "peo.yan": 6.43,
+    ]
+
     static let peoWeeks: [Week] = [
         Week(stage: "A", focus: "开嗓、测音域、气息", ex: ["peo.range", "peo.hiss", "peo.scale", "peo.321"]),
         Week(stage: "A", focus: "找到真实的声音和共鸣", ex: ["peo.voice", "peo.arp8"]),

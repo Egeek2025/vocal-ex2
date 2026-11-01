@@ -117,6 +117,34 @@ final class CourseTests: XCTestCase {
         XCTAssertTrue(Course.peo.exercises.allSatisfy { $0.videoID != nil })
     }
 
+    func testCourseRhythmFollowsTheVideo() {
+        let p = Course.patterns["down8"]!   // 8-5-3-1, 5 beats
+        var o = PlanOptions(bpm: 100)
+        o.courseRhythm = true
+        o.demo = .none
+        let plan = Planner.build(p, roots: [48, 49, 50], options: o, start: 0)
+        let beat = 60.0 / 100
+        // a one-beat chord, then singing straight away; only the first key is counted in
+        XCTAssertEqual(plan.blocks[1].chord!.upperBound - plan.blocks[1].chord!.lowerBound, beat, accuracy: 1e-9)
+        XCTAssertTrue(plan.blocks[1].countIn.isEmpty)
+        XCTAssertFalse(plan.blocks[0].countIn.isEmpty)
+        // key to key: chord + pattern, no pause
+        XCTAssertEqual(plan.blocks[2].t0 - plan.blocks[1].t0, (1 + p.beats) * beat, accuracy: 1e-9)
+        // the tempo that makes a key last as long as in the video
+        let bpm = Planner.courseBPM(p, keySeconds: 3.58)   // lip trill, measured in Ep. 5
+        XCTAssertEqual((1 + p.beats) * 60 / bpm, 3.58, accuracy: 0.05)
+    }
+
+    func testMeasuredKeyTimesBelongToCheckedExercises() {
+        XCTAssertFalse(Course.keySeconds.isEmpty)
+        for (id, s) in Course.keySeconds {
+            let ex = Course.byID[id]
+            XCTAssertNotNil(ex, id)
+            XCTAssertTrue(ex?.verified ?? false, id)
+            XCTAssertTrue((1.5...12).contains(s), id)
+        }
+    }
+
     func testBilibiliVideoLinks() {
         let t = Teacher(id: "x", name: "", about: "", platform: .bilibili, home: Course.peo.home, exercises: [],
                         warmup: [], weeks: [], stageNames: [:], checks: [], videos: [1: "BV1xx411c7mD"], cueChord: [], hasPrograms: false)

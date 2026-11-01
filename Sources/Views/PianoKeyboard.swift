@@ -142,7 +142,7 @@ struct PianoKeyboard: View {
         let shape = Path(roundedRect: r, cornerRadii: RectangleCornerRadii(bottomLeading: 3, bottomTrailing: 3))
         var fill: Color = k.white ? .white : Color(white: 0.12)
         if pressed.contains(k.midi) {
-            fill = k.white ? Color.orange.opacity(0.75) : Color.orange
+            fill = k.white ? Color.orange.opacity(0.85) : Color.orange
         } else if playing.contains(k.midi) {
             fill = .indigo
         } else if target == k.midi {
@@ -155,7 +155,12 @@ struct PianoKeyboard: View {
             let dot = CGRect(x: r.midX - d / 2, y: r.maxY - d - 6, width: d, height: d)
             ctx.fill(Path(ellipseIn: dot), with: .color(Color.cents(s.cents)))
         }
-        if k.white && k.midi % 12 == 0 {
+        if pressed.contains(k.midi) {
+            // the name of the key being pressed, e.g. E4
+            let size: CGFloat = min(13, max(9, r.width * 0.45))
+            ctx.draw(Text(Music.name(k.midi)).font(.system(size: size, weight: .bold, design: .rounded)).foregroundColor(.white),
+                     at: CGPoint(x: r.midX, y: k.white ? r.maxY - 8 : r.maxY - 5), anchor: .bottom)
+        } else if k.white && k.midi % 12 == 0 {
             ctx.draw(Text(Music.name(k.midi)).font(.system(size: 9, design: .monospaced)).foregroundColor(.gray),
                      at: CGPoint(x: r.midX, y: r.maxY - 22), anchor: .bottom)
         }

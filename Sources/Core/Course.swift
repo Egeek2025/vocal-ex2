@@ -48,6 +48,8 @@ struct Exercise: Identifiable, Hashable {
 
     var pattern: Pattern? { pat.flatMap { Course.patterns[$0] } }
     var videoURL: URL? { Course.teacher(teacher).videoURL(ep: ep, t: t) }
+    /// seconds from one key to the next as the teacher sings it in the video, when measured
+    var keySeconds: Double? { Course.keySeconds[id] }
     /// the online video id of the episode, nil when the exercise has no video yet
     var videoID: String? { Course.teacher(teacher).videos[ep].map(Teacher.plainID) }
 }
@@ -317,6 +319,19 @@ enum Course {
         ("录一段慢速、准确的 riff", "riff120"),
         ("录新歌的第一版", nil),
         ("结业检验：重唱基线歌曲并录音，写下三处具体变化", nil),
+    ]
+
+    /// Seconds from one key to the next in the video (the piano's chord, then the singing, then straight on),
+    /// measured by tools/course/analyze.py and discover.py as the median spacing of the takes. Only for
+    /// exercises whose pattern is checked against the video: the tempo is worked out from it and the pattern.
+    static let keySeconds: [String: Double] = stoneyKeySeconds.merging(peoKeySeconds) { a, _ in a }
+
+    static let stoneyKeySeconds: [String: Double] = [
+        "belt72": 3.9, "comp104": 3.31, "crack12": 6.91, "ee33": 3.34, "ee54": 2.87, "fals89": 2.87,
+        "guun": 3.03, "head98": 2.52, "hoong": 3.37, "i38": 3.37, "jaw35": 5.46, "larynx17": 7.61,
+        "low128": 4.54, "mix40": 2.77, "ng": 3.59, "ngah": 9.75, "ngv": 2.86, "oh61": 4.15, "penta3": 7.27,
+        "pitch34": 2.82, "str111": 3.09, "trill": 3.58, "twang": 6.99, "vib64": 10.44, "vwohm": 4.01,
+        "yoh": 3.01,
     ]
 
     static let stoneyStages = ["A": "基础", "B": "声区与过渡", "C": "元音与共鸣", "D": "力量与技巧", "E": "应用"]
