@@ -63,6 +63,9 @@ final class PracticeSession {
 
     // MARK: running
 
+    /// Runs on the main thread: as a plain async method it would run on a background thread, and the
+    /// state it sets (running, preparing, notice) would not reach the screen.
+    @MainActor
     func start(_ mode: Mode, model: AppModel) async {
         guard !running, !preparing else { return }
         self.model = model
