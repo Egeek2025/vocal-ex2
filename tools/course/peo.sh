@@ -74,12 +74,12 @@ case "${1:-help}" in
     ytnet=()
     if [ -n "${PROXY:-}" ]; then ytnet+=(--proxy "$PROXY"); elif [ -n "${DIRECT:-}" ]; then ytnet+=(--proxy ""); fi
     [ -n "${IPV4:-}" ] && ytnet+=(--force-ipv4)
-    url=$("$PY" -m yt_dlp "${ytnet[@]}" --cookies-from-browser "$BROWSER" --socket-timeout 20 --flat-playlist --playlist-items 1 --print url "$SAMPLE_URL" 2>/dev/null | head -1 || true)
+    url=$("$PY" -m yt_dlp ${ytnet[@]+"${ytnet[@]}"} --cookies-from-browser "$BROWSER" --socket-timeout 20 --flat-playlist --playlist-items 1 --print url "$SAMPLE_URL" 2>/dev/null | head -1 || true)
     if [ -z "$url" ]; then
       echo "没有拿到视频列表。连接超时的话，试试 DIRECT=1（不走代理）或 IPV4=1；Chrome 账户不是默认的，用 BROWSER=\"chrome:Profile 1\"。"
       exit 1
     fi
-    formats=$("$PY" -m yt_dlp "${ytnet[@]}" --cookies-from-browser "$BROWSER" -F "$url" 2>&1 || true)
+    formats=$("$PY" -m yt_dlp ${ytnet[@]+"${ytnet[@]}"} --cookies-from-browser "$BROWSER" -F "$url" 2>&1 || true)
     if echo "$formats" | grep -qiE "could not (find|decrypt)|failed to decrypt|keyring|cookie.*(error|locked)"; then
       echo "$formats" | grep -iE "cookie|keyring|decrypt" | head -5
       echo
@@ -98,25 +98,25 @@ case "${1:-help}" in
 
   list)
     need_venv
-    "$PY" tools/course/fetch.py --teacher peo --list --cookies-from-browser "$BROWSER" "${NET[@]}"
+    "$PY" tools/course/fetch.py --teacher peo --list --cookies-from-browser "$BROWSER" ${NET[@]+"${NET[@]}"}
     ;;
 
   download)
     need_venv
     if [ -n "${2:-}" ]; then
       echo "下载标题匹配「$2」的视频（1080p，已下载的会跳过）"
-      "$PY" tools/course/fetch.py --teacher peo --match "$2" --cookies-from-browser "$BROWSER" "${NET[@]}"
+      "$PY" tools/course/fetch.py --teacher peo --match "$2" --cookies-from-browser "$BROWSER" ${NET[@]+"${NET[@]}"}
     else
       echo "下载 ${#LESSONS[@]} 个声乐教学视频（1080p，已下载的会跳过）"
       ids=$(IFS=,; echo "${LESSONS[*]}")
-      "$PY" tools/course/fetch.py --teacher peo --ids "$ids" --cookies-from-browser "$BROWSER" "${NET[@]}"
+      "$PY" tools/course/fetch.py --teacher peo --ids "$ids" --cookies-from-browser "$BROWSER" ${NET[@]+"${NET[@]}"}
     fi
     ;;
 
   ids)
     need_venv
     [ -n "${2:-}" ] || { echo "用法：tools/course/peo.sh ids BV1xx,BV1yy"; exit 1; }
-    "$PY" tools/course/fetch.py --teacher peo --ids "$2" --cookies-from-browser "$BROWSER" "${NET[@]}"
+    "$PY" tools/course/fetch.py --teacher peo --ids "$2" --cookies-from-browser "$BROWSER" ${NET[@]+"${NET[@]}"}
     ;;
 
   analyze)

@@ -4,6 +4,24 @@
 
 支持两位老师：`--teacher stoney`（Justin Stoney，YouTube，默认）和 `--teacher peo`（Peo 老师，Bilibili）。
 
+## 在 Mac 上直接下载（推荐）
+
+在装了应用的那台 Mac 上运行 `mac.sh`，视频直接下到应用要读的文件夹（默认 `~/Movies/练声房视频`），不用再从别的电脑拷贝：
+
+```bash
+git clone https://github.com/Egeek2025/vocal-ex2.git && cd vocal-ex2
+tools/course/mac.sh setup                                   # 一次：Homebrew 装 ffmpeg/python/node，建 venv
+PROXY=http://127.0.0.1:7890 tools/course/mac.sh check       # 检查 YouTube（走代理）和 B 站登录
+PROXY=http://127.0.0.1:7890 tools/course/mac.sh all         # 两位老师的视频都下载，1080p
+```
+
+- `PROXY` 只用于 YouTube；B 站默认直连，需要代理时另设 `BILI_PROXY`。
+- B 站 1080p 用 Chrome 里的登录（`BROWSER=safari` 等可换浏览器）；第一次会弹窗问是否允许访问「Chrome Safe Storage」，选允许。
+- 换存放位置：`MEDIA=/Volumes/外置盘/练声房视频 tools/course/mac.sh all`。
+- 下载完在应用「设置」里选择这个文件夹；以后新下载了视频，点「重新查找」。
+
+下面是 Ubuntu 上的用法（也适用于想在别的电脑上下载再拷贝的情况）。
+
 ## 准备（只需一次）
 
 适用于 Ubuntu（在 Ubuntu 25 上使用 Python 自带的 venv）。在仓库根目录运行：

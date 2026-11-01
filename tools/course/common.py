@@ -4,6 +4,7 @@ The exercise list and video IDs are read from Sources/Core/Course.swift (Justin 
 Sources/Core/Peo.swift (Peo 老师) so the tools always match the app.
 """
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -13,7 +14,8 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 COURSE_SWIFT = ROOT / "Sources" / "Core" / "Course.swift"
 PEO_SWIFT = ROOT / "Sources" / "Core" / "Peo.swift"
-MEDIA = HERE / "media"      # downloaded videos, subtitles, chapter info (not in git)
+# downloaded videos, subtitles, chapter info (not in git); VOCAL_MEDIA puts them anywhere, e.g. ~/Movies/练声房视频
+MEDIA = Path(os.environ.get("VOCAL_MEDIA") or HERE / "media").expanduser()
 OUTPUT = HERE / "output"    # analysis results (not in git: they quote the videos' subtitles)
 
 PLAYLIST = "https://www.youtube.com/playlist?list=PLpcARcDSTR0KZjKxP9ecy7qadkM3Hqk_j"

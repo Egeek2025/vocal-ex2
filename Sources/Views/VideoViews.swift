@@ -134,16 +134,40 @@ private func jumpPoints(_ exercise: Exercise) -> [Exercise] {
         .sorted { $0.t < $1.t }
 }
 
-/// Owns the player for a local course video and seeks it to exercises.
+/// Owns the player for a local course video and seeks it to exercises. Seeks wait until the file has
+/// loaded; a file the player cannot open is reported instead of being played.
 @Observable
 final class CourseVideo {
     let player = AVPlayer()
     var current: String
+    /// why the file cannot be played, when it cannot
+    var failure: String?
+    @ObservationIgnored private var status: NSKeyValueObservation?
+    @ObservationIgnored private var pending: (t: Int, play: Bool)?
 
-    init(exercise: Exercise, file: URL) {
+    init(exercise: Exercise, file: URL, autoplay: Bool) {
         current = exercise.id
-        player.replaceCurrentItem(with: AVPlayerItem(url: file))
-        seek(exercise, play: false)
+        pending = (exercise.t, autoplay)
+        let item = AVPlayerItem(url: file)
+        status = item.observe(\.status, options: [.initial, .new]) { [weak self] item, _ in
+            let s = item.status, error = item.error?.localizedDescription
+            DispatchQueue.main.async { self?.statusChanged(s, error) }
+        }
+        player.replaceCurrentItem(with: item)
+    }
+
+    private func statusChanged(_ s: AVPlayerItem.Status, _ error: String?) {
+        switch s {
+        case .readyToPlay:
+            if let p = pending {
+                pending = nil
+                seek(to: p.t, play: p.play)
+            }
+        case .failed:
+            failure = error ?? "未知错误"
+        default:
+            break
+        }
     }
 
     func seek(_ e: Exercise, play: Bool = true) {
@@ -152,13 +176,85 @@ final class CourseVideo {
     }
 
     func seek(to t: Int, play: Bool = true) {
+        guard player.currentItem?.status == .readyToPlay else {
+            pending = (t, play)
+            return
+        }
         player.seek(to: CMTime(seconds: Double(t), preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
         if play { player.play() }
     }
 
     func close() {
+        status?.invalidate()
+        status = nil
         player.pause()
         player.replaceCurrentItem(with: nil)
+    }
+}
+
+/// AVKit's own player view: the native controls, without SwiftUI's VideoPlayer wrapper.
+#if os(macOS)
+struct PlayerView: NSViewRepresentable {
+    let player: AVPlayer
+
+    func makeNSView(context: Context) -> AVPlayerView {
+        let v = AVPlayerView()
+        v.player = player
+        v.controlsStyle = .inline
+        v.showsFullScreenToggleButton = true
+        return v
+    }
+
+    func updateNSView(_ v: AVPlayerView, context: Context) {
+        if v.player !== player { v.player = player }
+    }
+
+    static func dismantleNSView(_ v: AVPlayerView, coordinator: ()) {
+        v.player = nil
+    }
+}
+#else
+struct PlayerView: UIViewControllerRepresentable {
+    let player: AVPlayer
+
+    func makeUIViewController(context: Context) -> AVPlayerViewController {
+        let c = AVPlayerViewController()
+        c.player = player
+        return c
+    }
+
+    func updateUIViewController(_ c: AVPlayerViewController, context: Context) {
+        if c.player !== player { c.player = player }
+    }
+
+    static func dismantleUIViewController(_ c: AVPlayerViewController, coordinator: ()) {
+        c.player = nil
+    }
+}
+#endif
+
+/// The player, or why the file cannot be played.
+private struct VideoSurface: View {
+    let video: CourseVideo
+
+    var body: some View {
+        if let f = video.failure {
+            VStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle").font(.title2)
+                Text("这个视频无法播放：\(f)").font(.callout)
+                Text("可以在下载视频的电脑上运行 tools/course/transcode.py 转换后再试。").font(.caption).foregroundStyle(.secondary)
+            }
+            .multilineTextAlignment(.center)
+            .padding()
+            .frame(maxWidth: .infinity)
+            .aspectRatio(16 / 9, contentMode: .fit)
+            .background(RoundedRectangle(cornerRadius: 8).fill(.quaternary))
+        } else {
+            PlayerView(player: video.player)
+                .frame(maxWidth: .infinity)
+                .aspectRatio(16 / 9, contentMode: .fit)
+                .background(.black)
+        }
     }
 }
 
@@ -166,19 +262,31 @@ final class CourseVideo {
 struct CourseVideoPlayer: View {
     @Environment(\.dismiss) private var dismiss
     let exercise: Exercise
-    @State private var video: CourseVideo
-
-    init(exercise: Exercise, file: URL) {
-        self.exercise = exercise
-        _video = State(initialValue: CourseVideo(exercise: exercise, file: file))
-    }
+    let file: URL
+    @State private var video: CourseVideo? = nil
 
     var body: some View {
         NavigationStack {
+            if let video {
+                content(video)
+            } else {
+                ProgressView()
+            }
+        }
+        #if os(macOS)
+        .frame(minWidth: 720, minHeight: 600)
+        #endif
+        .onAppear {
+            AudioEngine.shared.prepareForVideo()
+            // created once here, not in init: SwiftUI runs a view's init on every redraw
+            if video == nil { video = CourseVideo(exercise: exercise, file: file, autoplay: true) }
+        }
+        .onDisappear { video?.close() }
+    }
+
+    private func content(_ video: CourseVideo) -> some View {
             VStack(spacing: 0) {
-                VideoPlayer(player: video.player)
-                    .aspectRatio(16 / 9, contentMode: .fit)
-                    .background(.black)
+                VideoSurface(video: video)
                 List {
                     Section {
                         ForEach(jumpPoints(exercise)) { p in
@@ -198,15 +306,6 @@ struct CourseVideoPlayer: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("关闭") { dismiss() } }
             }
-        }
-        #if os(macOS)
-        .frame(minWidth: 720, minHeight: 600)
-        #endif
-        .onAppear {
-            AudioEngine.shared.prepareForVideo()
-            video.player.play()
-        }
-        .onDisappear { video.close() }
     }
 }
 
@@ -233,29 +332,28 @@ private struct JumpRow: View {
 /// the microphone on, the note being sung shows on a keyboard as you sing with the teacher.
 struct VideoTrainingPanel: View {
     let exercise: Exercise
-    @State private var video: CourseVideo
+    let file: URL
+    @State private var video: CourseVideo? = nil
     @State private var listening = false
     @State private var micMissing = false
 
-    init(exercise: Exercise, file: URL) {
-        self.exercise = exercise
-        _video = State(initialValue: CourseVideo(exercise: exercise, file: file))
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            VideoPlayer(player: video.player)
-                .aspectRatio(16 / 9, contentMode: .fit)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    Button { video.seek(exercise) } label: { Label("回到本练习 \(Course.mmss(exercise.t))", systemImage: "arrow.uturn.backward") }
-                        .buttonStyle(.borderedProminent)
-                    ForEach(jumpPoints(exercise).filter { $0.id != exercise.id }) { p in
-                        Button("\(Course.mmss(p.t)) \(p.name)") { video.seek(p) }
-                            .buttonStyle(.bordered)
+            if let video {
+                VideoSurface(video: video)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        Button { video.seek(exercise) } label: { Label("回到本练习 \(Course.mmss(exercise.t))", systemImage: "arrow.uturn.backward") }
+                            .buttonStyle(.borderedProminent)
+                        ForEach(jumpPoints(exercise).filter { $0.id != exercise.id }) { p in
+                            Button("\(Course.mmss(p.t)) \(p.name)") { video.seek(p) }
+                                .buttonStyle(.bordered)
+                        }
                     }
                 }
+            } else {
+                ProgressView().frame(maxWidth: .infinity).aspectRatio(16 / 9, contentMode: .fit)
             }
             Toggle(isOn: $listening) {
                 Text("开麦跟唱：在键盘上显示你唱的音")
@@ -279,9 +377,14 @@ struct VideoTrainingPanel: View {
         }
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 10).strokeBorder(.quaternary))
+        .onAppear {
+            // created once here, not in init: SwiftUI runs a view's init on every redraw
+            if video == nil { video = CourseVideo(exercise: exercise, file: file, autoplay: false) }
+        }
         .onDisappear {
             listening = false
-            video.close()
+            video?.close()
+            video = nil
         }
     }
 }
