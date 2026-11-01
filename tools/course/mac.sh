@@ -48,17 +48,18 @@ case "${1:-help}" in
     # Homebrew no longer has ready-made packages for Intel Macs, so every tool has a fallback that needs no build
     have_brew=$(command -v brew >/dev/null && echo 1 || true)
 
-    # ffmpeg + ffprobe: Homebrew, else the static builds from evermeet.cx (Intel; Apple Silicon runs them via Rosetta)
+    # ffmpeg + ffprobe: Homebrew, else the static builds from ffmpeg.martin-riedl.de for this Mac's chip
     if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
       if [ -n "$have_brew" ] && brew install ffmpeg; then
         :
       else
-        echo "Homebrew 装不了 ffmpeg，改为下载静态版 ffmpeg 和 ffprobe 到 tools/course/.bin"
+        arch=amd64
+        [ "$(uname -m)" = arm64 ] && arch=arm64
+        echo "Homebrew 装不了 ffmpeg，改为下载静态版 ffmpeg 和 ffprobe（macOS $arch）到 tools/course/.bin"
         mkdir -p tools/course/.bin
         for tool in ffmpeg ffprobe; do
-          url="https://evermeet.cx/ffmpeg/getrelease/zip"
-          [ "$tool" = ffprobe ] && url="https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip"
-          curl -fL --retry 3 -o "tools/course/.bin/$tool.zip" "$url"
+          curl -fL --retry 3 -o "tools/course/.bin/$tool.zip" \
+            "https://ffmpeg.martin-riedl.de/redirect/latest/macos/$arch/release/$tool.zip"
           unzip -o -q "tools/course/.bin/$tool.zip" -d tools/course/.bin
           rm "tools/course/.bin/$tool.zip"
           chmod +x "tools/course/.bin/$tool"
