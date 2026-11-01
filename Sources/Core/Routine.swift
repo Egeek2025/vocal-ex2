@@ -52,25 +52,12 @@ struct PracticeSummary {
     var total: [String: Int] = [:]
 }
 
-/// The 12-week plan as a daily routine: warm up, the week's material (learn on days 1-3,
+/// The teacher's weekly plan as a daily routine: warm up, the week's material (learn on days 1-3,
 /// drill on days 4-5, the week's check on day 6, rest on day 7), review one exercise from the
 /// week before, apply it to a song, cool down.
 enum Routine {
-    /// The plan's weekly check ("本周检验"), and the exercise that measures it when there is one.
-    static let checks: [(text: String, exercise: String?)] = [
-        ("能独立做完热身，并测出自己的音域", "range"),
-        ("记录嘶气时长，作为之后对比的基线", "hiss"),
-        ("录一段熟悉的歌，和第 0 周的基线录音对比，听听是否更放松", nil),
-        ("分别录胸声、头声、假声三段", nil),
-        ("录一段跨过换声点的上行音阶", "passaggio"),
-        ("在同一个音高上录五个元音，比较音色是否一致", "vowels117"),
-        ("对比本周前后录音的明亮度和清晰度", nil),
-        ("录一段高音，检查是否发紧", nil),
-        ("连唱一首完整的歌，测试耐力", nil),
-        ("录一段慢速、准确的 riff", "riff120"),
-        ("录新歌的第一版", nil),
-        ("结业检验：重唱基线歌曲并录音，写下三处具体变化", nil),
-    ]
+    /// The plan's weekly check ("本周检验") for the current teacher.
+    static var checks: [(text: String, exercise: String?)] { Course.current.checks }
 
     /// Day of the course week counted from the day the week was started (1 = that day).
     static func day(since start: Date, now: Date = Date(), calendar: Calendar = .current) -> Int {
@@ -94,12 +81,10 @@ enum Routine {
             return DayPlan(week: w, day: day, headline: "第 \(w + 1) 周第 7 天 · 休息日：可以听歌，不练习，让嗓子恢复。", steps: [])
         }
 
-        var steps: [RoutineStep] = [
-            RoutineStep(id: "warmup.trill", kind: .warmup, exercise: "trill", minutes: 3, title: "唇颤音热身",
-                        detail: "唱 5 个调，气流均匀、放松。", maxKeys: 5),
-            RoutineStep(id: "warmup.ng", kind: .warmup, exercise: "ng", minutes: 2, title: "NG 哼鸣热身",
-                        detail: "唱 5 个调，把声音放到前面。", maxKeys: 5),
-        ]
+        var steps: [RoutineStep] = Course.current.warmup.enumerated().map { i, w in
+            RoutineStep(id: "warmup.\(w.id)", kind: .warmup, exercise: w.id, minutes: i == 0 ? 3 : 2,
+                        title: (Course.byID[w.id]?.name ?? w.id) + "热身", detail: w.detail, maxKeys: 5)
+        }
 
         let headline: String
         switch day {

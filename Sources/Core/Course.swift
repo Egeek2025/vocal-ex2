@@ -42,10 +42,54 @@ struct Exercise: Identifiable, Hashable {
     var metric: Metric = .none
     /// the pattern was checked against the course video (subtitles or audio analysis)
     var verified: Bool = false
+    /// whose course this exercise comes from; `ep` indexes that teacher's video list
+    var teacher: String = "stoney"
     let tip: String
 
     var pattern: Pattern? { pat.flatMap { Course.patterns[$0] } }
-    var videoURL: URL? { Course.videoURL(ep: ep, t: t) }
+    var videoURL: URL? { Course.teacher(teacher).videoURL(ep: ep, t: t) }
+    /// the online video id of the episode, nil when the exercise has no video yet
+    var videoID: String? { Course.teacher(teacher).videos[ep].map(Teacher.plainID) }
+}
+
+/// One teacher's course: exercises, weekly plan and videos. The app follows one teacher at a time.
+struct Teacher: Identifiable {
+    enum Platform { case youtube, bilibili }
+
+    let id: String
+    let name: String
+    let about: String
+    let platform: Platform
+    /// the teacher's channel, for exercises that have no video of their own yet
+    let home: URL
+    let exercises: [Exercise]
+    /// done every day, with what to focus on
+    let warmup: [(id: String, detail: String)]
+    let weeks: [Week]
+    let stageNames: [String: String]
+    /// the weekly check, and the exercise that measures it when there is one
+    let checks: [(text: String, exercise: String?)]
+    /// episode number -> video id (YouTube id, `live:` id, or Bilibili BV id)
+    let videos: [Int: String]
+    /// notes of the chord that sets each key, in semitones from the root
+    let cueChord: [Int]
+    /// the extra programs (quick warm-up, head voice) are built from this teacher's exercises
+    let hasPrograms: Bool
+
+    static func plainID(_ id: String) -> String { id.hasPrefix("live:") ? String(id.dropFirst(5)) : id }
+
+    func videoURL(ep: Int, t: Int) -> URL? {
+        guard let id = videos[ep] else { return nil }
+        switch platform {
+        case .bilibili:
+            return URL(string: "https://www.bilibili.com/video/\(id)/" + (t > 0 ? "?t=\(t)" : ""))
+        case .youtube:
+            if id.hasPrefix("live:") {
+                return URL(string: "https://www.youtube.com/live/\(id.dropFirst(5))" + (t > 0 ? "?t=\(t)s" : ""))
+            }
+            return URL(string: "https://www.youtube.com/watch?v=\(id)" + (t > 0 ? "&t=\(t)s" : ""))
+        }
+    }
 }
 
 struct Week {
@@ -137,17 +181,9 @@ enum Course {
         130: "live:YLovaQ0gSwo",
     ]
 
-    static func videoURL(ep: Int, t: Int) -> URL? {
-        guard let id = videoIDs[ep] else { return nil }
-        if id.hasPrefix("live:") {
-            return URL(string: "https://www.youtube.com/live/\(id.dropFirst(5))" + (t > 0 ? "?t=\(t)s" : ""))
-        }
-        return URL(string: "https://www.youtube.com/watch?v=\(id)" + (t > 0 ? "&t=\(t)s" : ""))
-    }
-
     static func mmss(_ t: Int) -> String { String(format: "%d:%02d", t / 60, t % 60) }
 
-    static let exercises: [Exercise] = [
+    static let stoneyExercises: [Exercise] = [
         Exercise(id: "trill", ep: 5, t: 205, name: "唇颤音", syl: "Brrr", pat: "down8", fromTitle: true, verified: true, tip: "嘴唇放松地颤动，像小马打响鼻；用手指轻推两颊能帮助起振。气流均匀，音高走得平滑。"),
         Exercise(id: "ng", ep: 101, t: 208, name: "NG 哼鸣", syl: "NG", pat: "down5", fromTitle: true, verified: true, tip: "舌根轻贴软腭，像英文 sing 的尾音。声音集中在鼻腔和脸的前方，喉咙不用力。"),
         Exercise(id: "ngah", ep: 101, t: 289, name: "NG 打开到 AH", syl: "NG-AH-AH-AH", pat: "p1851", fromTitle: true, verified: true, tip: "先在 NG 上找到集中的位置，再打开成 AH，打开时保持同样的位置和音量。"),
@@ -203,13 +239,35 @@ enum Course {
         Exercise(id: "larynx129", ep: 129, t: 441, name: "喉位控制", syl: "GUH / NAY", pat: "arp8", metric: .bright, tip: "同一个音型交替用低喉位的 GUH 和高喉位的 NAY，感受音色的变化。"),
     ]
 
-    static let byID: [String: Exercise] = Dictionary(uniqueKeysWithValues: exercises.map { ($0.id, $0) })
+    static let teachers: [Teacher] = [stoney, peo]
 
-    /// Short daily warm-up shown above the weeks (plan: lip trills and humming, Ep. 5 and Ep. 101).
-    static let warmup = ["trill", "ng"]
+    /// The teacher the app follows; set by AppModel when the user switches.
+    static var current: Teacher = stoney
+
+    static func teacher(_ id: String) -> Teacher { teachers.first { $0.id == id } ?? stoney }
+
+    static var exercises: [Exercise] { current.exercises }
+    static var warmup: [String] { current.warmup.map { $0.id } }
+    static var weeks: [Week] { current.weeks }
+    static var stageNames: [String: String] { current.stageNames }
+    static var cueChord: [Int] { current.cueChord }
+
+    /// Every teacher's exercises; ids are unique across teachers.
+    static let byID: [String: Exercise] = Dictionary(uniqueKeysWithValues: teachers.flatMap(\.exercises).map { ($0.id, $0) })
+
+    static let stoney = Teacher(
+        id: "stoney", name: "Justin Stoney", about: "Voice Lessons To The World · 12 周方案",
+        platform: .youtube, home: URL(string: "https://www.youtube.com/playlist?list=PLpcARcDSTR0KZjKxP9ecy7qadkM3Hqk_j")!,
+        exercises: stoneyExercises,
+        // plan: lip trills and humming every day (Ep. 5 and Ep. 101)
+        warmup: [("trill", "唱 5 个调，气流均匀、放松。"), ("ng", "唱 5 个调，把声音放到前面。")],
+        weeks: stoneyWeeks, stageNames: stoneyStages, checks: stoneyChecks, videos: videoIDs,
+        // a major triad over two octaves (1 3 5 1' 3' 5'), found by tools/course/analyze.py in the exercises
+        // where the piano is heard clearly (trill, oh61, ee33, yoh, mix40, low128, twang)
+        cueChord: [0, 4, 7, 12, 16, 19], hasPrograms: true)
 
     /// Each exercise sits in the week its episode is scheduled in the 12-week plan; week 12 reviews earlier ones.
-    static let weeks: [Week] = [
+    static let stoneyWeeks: [Week] = [
         Week(stage: "A", focus: "入门、热身、找到音域", ex: ["range", "chest98", "head98", "mix99"]),
         Week(stage: "A", focus: "呼吸方式、嘶气练习、常见错误", ex: ["hiss", "str111", "flex111"]),
         Week(stage: "A", focus: "气息支持，放松下巴和舌头", ex: ["farinelli", "shzh", "stamina62", "trill", "ng", "ngah", "ngv", "jaw35", "ee33"]),
@@ -224,10 +282,21 @@ enum Course {
         Week(stage: "E", focus: "复习和结业检验（前面各周的检验项目）", ex: ["passaggio", "vowels117", "vib64", "hiss"]),
     ]
 
-    static let stageNames = ["A": "基础", "B": "声区与过渡", "C": "元音与共鸣", "D": "力量与技巧", "E": "应用"]
+    /// The 12-week plan's weekly check ("本周检验"), and the exercise that measures it when there is one.
+    static let stoneyChecks: [(text: String, exercise: String?)] = [
+        ("能独立做完热身，并测出自己的音域", "range"),
+        ("记录嘶气时长，作为之后对比的基线", "hiss"),
+        ("录一段熟悉的歌，和第 0 周的基线录音对比，听听是否更放松", nil),
+        ("分别录胸声、头声、假声三段", nil),
+        ("录一段跨过换声点的上行音阶", "passaggio"),
+        ("在同一个音高上录五个元音，比较音色是否一致", "vowels117"),
+        ("对比本周前后录音的明亮度和清晰度", nil),
+        ("录一段高音，检查是否发紧", nil),
+        ("连唱一首完整的歌，测试耐力", nil),
+        ("录一段慢速、准确的 riff", "riff120"),
+        ("录新歌的第一版", nil),
+        ("结业检验：重唱基线歌曲并录音，写下三处具体变化", nil),
+    ]
 
-    /// Notes of the chord that sets each key, in semitones from the root (negative = below the root).
-    /// The course plays a major triad over two octaves (1 3 5 1' 3' 5'), found by tools/course/analyze.py
-    /// in the exercises where the piano is heard clearly (trill, oh61, ee33, yoh, mix40, low128, twang).
-    static let cueChord = [0, 4, 7, 12, 16, 19]
+    static let stoneyStages = ["A": "基础", "B": "声区与过渡", "C": "元音与共鸣", "D": "力量与技巧", "E": "应用"]
 }

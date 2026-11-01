@@ -1,7 +1,7 @@
 """Shared paths and course data for the course tools.
 
-The exercise list and video IDs are read from Sources/Core/Course.swift so the tools
-always match the app.
+The exercise list and video IDs are read from Sources/Core/Course.swift (Justin Stoney) and
+Sources/Core/Peo.swift (Peo 老师) so the tools always match the app.
 """
 import json
 import re
@@ -12,35 +12,54 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 COURSE_SWIFT = ROOT / "Sources" / "Core" / "Course.swift"
+PEO_SWIFT = ROOT / "Sources" / "Core" / "Peo.swift"
 MEDIA = HERE / "media"      # downloaded videos, subtitles, chapter info (not in git)
-OUTPUT = HERE / "output"    # analysis results (small text files, meant to be committed)
+OUTPUT = HERE / "output"    # analysis results (not in git: they quote the videos' subtitles)
 
 PLAYLIST = "https://www.youtube.com/playlist?list=PLpcARcDSTR0KZjKxP9ecy7qadkM3Hqk_j"
 
+# where each teacher's videos are, and which Swift file holds the exercises and video table
+TEACHERS = {
+    "stoney": {"name": "Justin Stoney", "site": "youtube", "swift": COURSE_SWIFT, "table": "videoIDs",
+               "home": PLAYLIST},
+    "peo": {"name": "Peo 老师", "site": "bilibili", "swift": PEO_SWIFT, "table": "peoVideos",
+            "home": "https://space.bilibili.com/3546774224505365/video"},
+}
 
-def video_ids():
-    """Episode number -> YouTube video id."""
-    src = COURSE_SWIFT.read_text(encoding="utf-8")
-    block = src[src.index("static let videoIDs"):]
+
+def video_ids(teacher="stoney"):
+    """Episode number -> video id (YouTube id or Bilibili BV id) for a teacher."""
+    t = TEACHERS[teacher]
+    src = t["swift"].read_text(encoding="utf-8")
+    block = src[src.index(f"static let {t['table']}"):]
     block = block[block.index("= [") + 3:]
     block = block[:block.index("]")]
     return {int(ep): vid.replace("live:", "") for ep, vid in re.findall(r'(\d+): "([^"]+)"', block)}
 
 
-def exercises():
-    """All exercises defined in Course.swift, in order."""
-    src = COURSE_SWIFT.read_text(encoding="utf-8")
-    pat = re.compile(r'Exercise\(id: "([^"]+)", ep: (\d+), t: (\d+), name: "([^"]+)", syl: "([^"]+)"(?:, pat: "([^"]+)")?(.*?)\),?\n')
+def video_url(teacher, vid):
+    if TEACHERS[teacher]["site"] == "bilibili":
+        return f"https://www.bilibili.com/video/{vid}/"
+    return f"https://www.youtube.com/watch?v={vid}"
+
+
+def exercises(teacher=None):
+    """Exercises defined in the app, in order; every teacher's unless one is named."""
+    pat = re.compile(r'Exercise\(id: "([^"]+)", ep: (\d+), t: (\d+), name: "([^"]+)", syl: "([^"]+)"(?:, pat: "([^"]+)")?(.*?)\),?\n', re.S)
     out = []
-    vids = video_ids()
-    for m in pat.finditer(src):
-        ex_id, ep, t, name, syl, pattern, rest = m.groups()
-        kind = re.search(r"kind: \.(\w+)", rest or "")
-        out.append({
-            "id": ex_id, "ep": int(ep), "t": int(t), "name": name, "syl": syl,
-            "pattern": pattern, "kind": kind.group(1) if kind else "pitch",
-            "video": vids.get(int(ep)),
-        })
+    for tid, t in TEACHERS.items():
+        if teacher and tid != teacher:
+            continue
+        src = t["swift"].read_text(encoding="utf-8")
+        vids = video_ids(tid)
+        for m in pat.finditer(src):
+            ex_id, ep, t_, name, syl, pattern, rest = m.groups()
+            kind = re.search(r"kind: \.(\w+)", rest or "")
+            out.append({
+                "id": ex_id, "teacher": tid, "ep": int(ep), "t": int(t_), "name": name, "syl": syl,
+                "pattern": pattern, "kind": kind.group(1) if kind else "pitch",
+                "video": vids.get(int(ep)),
+            })
     return out
 
 
@@ -55,7 +74,7 @@ def app_patterns():
     are missing and get no template.
     """
     src = COURSE_SWIFT.read_text(encoding="utf-8")
-    block = src[src.index("static let patterns"):src.index("static let videoIDs")]
+    block = src[src.index("static let patterns"):src.index("static let videoIDs")]  # shared by all teachers
     out = {}
     for m in re.finditer(r'"(\w+)": Pattern\(name: "[^"]*", steps: (.*?)bpm:', block, re.S):
         name, body = m.group(1), m.group(2)

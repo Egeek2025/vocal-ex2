@@ -1,6 +1,8 @@
 # 课程视频分析工具
 
-在你自己的电脑上运行（云端服务器的 IP 会被 YouTube 拦截），把课程视频下载到本地，再从视频里分析出每个练习的音型、节奏和速度，结果用来校准应用里的练习。
+在你自己的电脑上运行（云端服务器的 IP 会被 YouTube 和 Bilibili 拦截），把老师的视频下载到本地，再从视频里分析出每个练习的音型、节奏和速度，结果用来校准应用里的练习。下载的视频也可以直接在应用里播放、跟着练（在应用「设置」里选择 `tools/course/media` 文件夹）。
+
+支持两位老师：`--teacher stoney`（Justin Stoney，YouTube，默认）和 `--teacher peo`（Peo 老师，Bilibili）。
 
 ## 准备（只需一次）
 
@@ -29,7 +31,30 @@ $PY tools/course/fetch.py --episodes 5,101 # 指定集数
 - 重复运行只会下载缺少的部分，中途断了可以直接再运行。
 - 如果 YouTube 提示需要验证，加上 `--cookies-from-browser firefox`（或 `chrome`、`chromium`），使用这个浏览器的登录状态。Ubuntu 上用 snap 装的 Firefox 要写成 `--cookies-from-browser "firefox:$HOME/snap/firefox/common/.mozilla/firefox"`。
 - yt-dlp 需要更新时（YouTube 改版后常见）：`tools/course/.venv/bin/python -m pip install -U "yt-dlp[default]"`。
-- 全部视频按 480p 下载大约需要几 GB 空间；可以用 `--max-height 360` 或 `--audio-only` 减小体积。
+- 默认按 **1080p** 下载（`--max-height 1440` 或 `2160` 可以更高）。网站只给 VP9/AV1 编码时，下载完会自动转成 H.264，保证 iPhone、iPad、Mac 都能播放（`--no-recode` 跳过）。1080p 每小时视频约 1–2 GB。
+- 只做分析不看视频的话，`--audio-only` 体积小很多。
+
+### 已经下载的视频转成能播放的格式
+
+```bash
+$PY tools/course/transcode.py --dry-run          # 只列出哪些视频需要转换
+$PY tools/course/transcode.py                    # 转换 tools/course/media 里的全部视频
+$PY tools/course/transcode.py ~/Videos/某个文件夹  # 也可以转换别的文件夹或单个文件
+```
+
+只重新编码 VP9/AV1 这类苹果设备不一定能解码的视频，分辨率不变；本来就能播放的不动；转换成功后才替换原文件。
+
+### Peo 老师（Bilibili）
+
+```bash
+$PY tools/course/fetch.py --teacher peo --list                                   # 先列出她的全部视频（只要标题和时长，不下载）
+$PY tools/course/fetch.py --teacher peo --match "练声|发声|音阶" --cookies-from-browser firefox   # 下载标题匹配的视频
+$PY tools/course/fetch.py --teacher peo --ids BV1xxxx,BV1yyyy --cookies-from-browser firefox     # 下载指定视频
+```
+
+- `--list` 把视频列表写到 `tools/course/output/peo_catalog.json`。把它发给 Claude（只有标题、时长和 BV 号），可以一起挑出练声视频。
+- Bilibili 不登录最高只给 480p/720p，要 1080p 需要加 `--cookies-from-browser`，用你登录 B 站的浏览器。登录信息只在你自己电脑上使用。
+- 字幕会尝试下载 B 站的 AI 中文字幕（有的视频没有）。
 
 ## 2. 分析音型
 
@@ -62,10 +87,21 @@ $PY tools/course/clips.py --only trill --take 2   # 第一个调里有讲解声�
 
 在应用的课程侧栏点「导入课程原声示范」，选择 `demo-pack` 文件夹。之后这些练习的示范就是 Justin 的原声，并自动移到每个调、跟着你设置的速度变化。iPhone 上使用时，先把 `demo-pack` 文件夹拷进「文件」App（例如 iCloud 云盘），再在应用里选择它。
 
+## Peo 老师：找出视频里的练习
+
+Peo 老师的视频没有练习列表和章节，用 `discover.py` 扫描整段视频：同一个音型一个调接一个调重复，就认为是一个练习。
+
+```bash
+$PY tools/course/discover.py --teacher peo                    # 所有已下载的 Peo 老师视频
+$PY tools/course/discover.py --teacher peo --ids BV1xxxx      # 指定视频
+```
+
+输出 `tools/course/output/peo_report.md` 和 `peo_exercises.json`：每个视频里每个练习的时间段、简谱音型、拍数、速度、连续调数、第一个调的根音，以及开唱前钢琴弹的和弦。报告里**没有字幕原文**，可以直接整份发给 Claude，用来把应用里 Peo 老师的练习对应到视频（打开练习就跳到视频里这一段）、改成她实际用的音型。
+
 ## 4. 更新应用
 
 `tools/course/output/` 不提交到仓库：`report.md` 里有课程字幕原文，仓库是公开的。需要更新应用时，把 `report.md` 里相关练习的音型、拍数、根音这几行（不用带字幕）贴给 Claude，让它更新 `Sources/Core/Course.swift` 里各练习的音型和音节。分析参数可以调整后重新运行，不需要重新下载视频。
 
 ## 版权
 
-课程视频版权归 Justin Stoney / New York Vocal Coaching 所有，下载 YouTube 视频也不符合 YouTube 的服务条款。这些文件只在本地供个人分析使用，不要提交到仓库、放进应用或分享给他人。
+课程视频版权归各位老师所有（Justin Stoney / New York Vocal Coaching；Peo 老师）。下载视频也可能不符合 YouTube、Bilibili 的服务条款。这些文件只在本地供个人学习和分析使用，不要提交到仓库、放进应用或分享给他人。

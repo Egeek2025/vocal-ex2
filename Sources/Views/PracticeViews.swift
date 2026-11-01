@@ -9,6 +9,7 @@ struct PracticeRoot: View {
         NavigationSplitView {
             CourseSidebar(selection: $selection)
                 .navigationTitle("练声房")
+                .toolbar { ToolbarItem { SettingsButton() } }
         } detail: {
             if let id = selection, let ex = Course.byID[id] {
                 let v = model.voice
@@ -40,13 +41,9 @@ struct CourseSidebar: View {
                 }
                 WeekGrid()
             } header: {
-                Text("12 周课程")
+                Text("\(model.teacher.name) · \(Course.weeks.count) 周课程")
             } footer: {
-                Text("钢琴采样来自 FluidR3 GM 音色库（Frank Wen，CC BY 3.0）。")
-            }
-            Section {
-                CoursePackImport()
-                VideoFolderSetting()
+                Text("在「设置」里切换老师、指定课程视频文件夹。")
             }
             Section("每日热身") {
                 ForEach(Course.warmup, id: \.self) { id in
@@ -127,10 +124,12 @@ struct ExerciseRow: View {
 
 struct ExerciseView: View {
     @Environment(AppModel.self) private var model
+    @Environment(VideoLibrary.self) private var videos
     let exercise: Exercise
     /// set when opened from the daily routine: what this step is for
     let step: RoutineStep?
     @State private var session: PracticeSession
+    @State private var withVideo = false
 
     init(exercise: Exercise, voice: VoiceRange, step: RoutineStep? = nil) {
         self.exercise = exercise
@@ -145,6 +144,7 @@ struct ExerciseView: View {
                     RoutineBanner(step: step, exercise: exercise)
                 }
                 header
+                videoTraining
                 Text(exercise.tip).font(.callout)
                 switch exercise.kind {
                 case .pitch:
@@ -165,6 +165,23 @@ struct ExerciseView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .onDisappear { session.stop(score: false) }
+    }
+
+    /// The course video inside the exercise, starting where this exercise is taught.
+    @ViewBuilder
+    private var videoTraining: some View {
+        if let file = videos.file(for: exercise) {
+            Button { withVideo.toggle() } label: {
+                Label(withVideo ? "收起视频" : "跟视频练（从 \(Course.mmss(exercise.t)) 开始）",
+                      systemImage: withVideo ? "chevron.up" : "play.rectangle.on.rectangle")
+            }
+            .buttonStyle(.bordered)
+            if withVideo {
+                VideoTrainingPanel(exercise: exercise, file: file)
+            }
+        } else if exercise.videoID != nil && videos.folderName == nil {
+            Text("在「设置」里指定课程视频文件夹后，可以在这里直接跟着视频练。").font(.caption).foregroundStyle(.secondary)
+        }
     }
 
     private var header: some View {

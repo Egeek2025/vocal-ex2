@@ -1,16 +1,17 @@
 import Foundation
 import Observation
 
-/// Course videos kept on the user's own disk. The app ships without them; the user points it at a folder
-/// once (for example tools/course/media, where fetch.py saves media/<id>/<id>.mp4) and it is remembered.
-/// A file belongs to an episode when its name contains that episode's YouTube id.
+/// Course videos kept on the user's own disk, for every teacher. The app ships without them; the user
+/// points it at one folder once (for example tools/course/media, where fetch.py saves media/<id>/<id>.mp4)
+/// and it is remembered. A file belongs to an episode when its name contains that episode's video id
+/// (YouTube id or Bilibili BV id).
 @Observable
 final class VideoLibrary {
     static let shared = VideoLibrary()
     static let extensions: Set<String> = ["mp4", "m4v", "mov"]
 
     private(set) var folderName: String?
-    /// YouTube id -> video file
+    /// video id -> video file
     private(set) var files: [String: URL] = [:]
     private(set) var scanning = false
 
@@ -19,16 +20,15 @@ final class VideoLibrary {
 
     private init() { restore() }
 
-    func file(ep: Int) -> URL? {
-        Course.videoIDs[ep].flatMap { files[Self.plainID($0)] }
+    func file(for exercise: Exercise) -> URL? {
+        exercise.videoID.flatMap { files[$0] }
     }
 
-    /// Episodes of the course plan that have a video in the folder.
-    var episodesFound: Int {
-        Set(Course.exercises.map(\.ep)).filter { file(ep: $0) != nil }.count
+    /// Episodes of a teacher's plan that have a video in the folder, out of those with a video at all.
+    func found(_ teacher: Teacher) -> (found: Int, total: Int) {
+        let ids = Set(teacher.exercises.compactMap(\.videoID))
+        return (ids.filter { files[$0] != nil }.count, ids.count)
     }
-
-    static func plainID(_ id: String) -> String { id.hasPrefix("live:") ? String(id.dropFirst(5)) : id }
 
     func choose(_ url: URL) {
         release()
@@ -81,7 +81,7 @@ final class VideoLibrary {
         folder = url
         folderName = url.lastPathComponent
         scanning = true
-        let ids = Set(Course.videoIDs.values.map(Self.plainID))
+        let ids = Set(Course.teachers.flatMap { $0.videos.values.map(Teacher.plainID) })
         Task.detached(priority: .utility) {
             let found = Self.scan(url, ids: ids)
             await MainActor.run {

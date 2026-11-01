@@ -16,6 +16,14 @@ struct VocalStudioApp: App {
             // let go of the microphone and the audio hardware as soon as the app is out of sight
             if p == .background { AudioEngine.shared.stopIfIdle(force: true) }
         }
+        #if os(macOS)
+        Settings {
+            NavigationStack { SettingsView() }
+                .environment(model)
+                .environment(VideoLibrary.shared)
+                .frame(width: 520, height: 560)
+        }
+        #endif
     }
 }
 
@@ -41,5 +49,7 @@ struct ContentView: View {
                 .tabItem { Label("记录", systemImage: "list.bullet.rectangle") }
                 .tag(AppTab.log)
         }
+        // the course data follows the teacher, so rebuild the screens when the teacher changes
+        .id(model.teacherID)
     }
 }

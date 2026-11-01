@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The day's practice from the 12-week plan, in order, with the week's progress.
+/// The day's practice from the current teacher's plan, in order, with the week's progress.
 struct TodayView: View {
     @Environment(AppModel.self) private var model
     @State private var confirmAdvance = false
@@ -14,6 +14,7 @@ struct TodayView: View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
+                    Text("\(model.teacher.name) · \(model.teacher.about)").font(.caption).foregroundStyle(.secondary)
                     HStack(alignment: .firstTextBaseline) {
                         Text("第 \(plan.week + 1) 周").font(.title2.weight(.bold))
                         Text("阶段 \(info.stage) · \(Course.stageNames[info.stage] ?? "")")
@@ -44,7 +45,7 @@ struct TodayView: View {
                 Section {
                     Text("按方案每周练 6 天，第 7 天休息，让嗓子恢复。想动一动的话，只做轻柔的唇颤音热身就好。")
                         .font(.callout)
-                    if let trill = Course.byID["trill"] {
+                    if let first = Course.warmup.first, let trill = Course.byID[first] {
                         NavigationLink(value: RoutineStep(id: "rest.trill", kind: .warmup, exercise: trill.id, minutes: 3,
                                                           title: trill.name, detail: "轻柔地唱几个调。", maxKeys: 4)) {
                             Label("轻松热身（可选）", systemImage: "wind")
@@ -59,6 +60,7 @@ struct TodayView: View {
                 }
             }
 
+            if model.teacher.hasPrograms {
             Section {
                 ForEach(Routine.Program.allCases) { program in
                     let steps = Routine.steps(program)
@@ -74,6 +76,7 @@ struct TodayView: View {
             } footer: {
                 Text("不占用每天的课程进度，什么时候都可以单独做。")
             }
+            }
 
             Section {
                 if plan.week + 1 < Course.weeks.count {
@@ -83,7 +86,7 @@ struct TodayView: View {
                         Label("完成第 \(plan.week + 1) 周，进入第 \(plan.week + 2) 周", systemImage: "arrow.right.circle")
                     }
                 } else {
-                    Text("这是最后一周。做完结业检验后，可以把第 3、5、6 周的检验项目当作长期练习。").font(.callout)
+                    Text("这是最后一周。做完结业检验后，可以把前面各周的检验项目当作长期练习。").font(.callout)
                 }
                 Picker("从某一周重新开始", selection: Binding(get: { model.courseWeek }, set: { model.startCourseWeek($0) })) {
                     ForEach(0..<Course.weeks.count, id: \.self) { w in
@@ -97,6 +100,7 @@ struct TodayView: View {
             }
         }
         .navigationTitle("今日练习")
+        .toolbar { ToolbarItem { SettingsButton() } }
         .navigationDestination(for: RoutineStep.self) { step in
             if let id = step.exercise, let ex = Course.byID[id] {
                 ExerciseView(exercise: ex, voice: model.voice, step: step)

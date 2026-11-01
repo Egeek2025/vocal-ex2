@@ -85,6 +85,27 @@ final class CourseTests: XCTestCase {
         }
     }
 
+    func testEveryTeacherCourseIsComplete() {
+        let all = Course.teachers.flatMap(\.exercises).map(\.id)
+        XCTAssertEqual(all.count, Set(all).count, "exercise ids must be unique across teachers")
+        for t in Course.teachers {
+            XCTAssertEqual(t.checks.count, t.weeks.count, t.id)
+            for w in t.weeks {
+                for id in w.ex { XCTAssertEqual(Course.byID[id]?.teacher, t.id, id) }
+            }
+            for w in t.warmup { XCTAssertEqual(Course.byID[w.id]?.teacher, t.id, w.id) }
+            for e in t.exercises where e.kind == .pitch { XCTAssertNotNil(e.pattern, e.id) }
+            for c in t.checks { if let id = c.exercise { XCTAssertNotNil(Course.byID[id], id) } }
+        }
+    }
+
+    func testBilibiliVideoLinks() {
+        let t = Teacher(id: "x", name: "", about: "", platform: .bilibili, home: Course.peo.home, exercises: [],
+                        warmup: [], weeks: [], stageNames: [:], checks: [], videos: [1: "BV1xx411c7mD"], cueChord: [], hasPrograms: false)
+        XCTAssertEqual(t.videoURL(ep: 1, t: 95)?.absoluteString, "https://www.bilibili.com/video/BV1xx411c7mD/?t=95")
+        XCTAssertNil(t.videoURL(ep: 2, t: 0))
+    }
+
     func testLipTrillFollowsCourse() {
         XCTAssertEqual(Course.byID["trill"]!.pattern!.steps.map { $0.s }, [12, 7, 4, 0])
     }
