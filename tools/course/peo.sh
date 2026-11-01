@@ -4,8 +4,8 @@
 #   tools/course/peo.sh setup                 # 一次：装好 venv、yt-dlp 和读取 Chrome 登录需要的组件
 #   tools/course/peo.sh check                 # 检查能不能用 Chrome 的登录拿到 1080p
 #   tools/course/peo.sh list                  # 列出她的全部视频 -> tools/course/output/peo_catalog.json
-#   tools/course/peo.sh download              # 下载标题像练声课的视频（默认关键词见下）
-#   tools/course/peo.sh download "混声|高音"   # 只下载标题匹配这些关键词的
+#   tools/course/peo.sh download              # 下载她的声乐教学视频（下面 LESSONS 里挑好的 18 个）
+#   tools/course/peo.sh download "混声|高音"   # 改为下载标题匹配这些关键词的
 #   tools/course/peo.sh ids BV1xx,BV1yy       # 下载指定的视频
 #   tools/course/peo.sh analyze               # 找出视频里的练习 -> tools/course/output/peo_report.md
 #   tools/course/peo.sh all                   # list + download + analyze
@@ -28,8 +28,30 @@ NET=()
 if [ -n "${PROXY:-}" ]; then NET+=(--proxy "$PROXY"); elif [ -n "${DIRECT:-}" ]; then NET+=(--proxy ""); fi
 [ -n "${IPV4:-}" ] && NET+=(--ipv4)
 if [ -n "${DIRECT:-}" ]; then unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY; fi
-MATCH_DEFAULT="练声|发声|音阶|练习|气息|呼吸|混声|高音|头声|真声|假声|换声|共鸣|咬字|颤音|转音|SLS|热身|开嗓"
 SAMPLE_URL="https://space.bilibili.com/3546774224505365/video"
+# her teaching videos, picked from the catalog by title (2026-11): technique lessons that may contain
+# exercises. Left out: the song cover, the face-reveal intro, the opinion piece on choosing teachers,
+# and the two clips under a minute.
+LESSONS=(
+  BV18vNd6sE2A  # 8分钟喉咙开启全盛状态（开嗓）
+  BV1Gpjd6XEFw  # 测出真实音域
+  BV12drSBpEeU  # 找到你自己真实的声音
+  BV1DHcszMExr  # 气息
+  BV1pXFLzAE9V  # 喉位
+  BV1r76jB7E4U  # 腔体
+  BV1TyDZBKEmf  # 头声
+  BV1Hnun6QEqp  # 真假声切换
+  BV1wqHD6iExK  # 换声点
+  BV1MewWzNELk  # 混声
+  BV1tY8b6ME5V  # 弱混
+  BV1XNew6jERm  # 强混
+  BV1eSAczUEwQ  # 破音、挤卡
+  BV1M5V46REwK  # 别再挤卡
+  BV17E5e6FELf  # 咽音
+  BV1pBxe6vEs9  # 四个坏习惯
+  BV1MtMw63Ees  # 摇滚
+  BV1wu9QBmEL7  # R&B 唱法
+)
 
 need_venv() {
   if [ ! -x "$PY" ]; then
@@ -81,9 +103,14 @@ case "${1:-help}" in
 
   download)
     need_venv
-    match="${2:-$MATCH_DEFAULT}"
-    echo "下载标题匹配「$match」的视频（1080p，已下载的会跳过）"
-    "$PY" tools/course/fetch.py --teacher peo --match "$match" --cookies-from-browser "$BROWSER" "${NET[@]}"
+    if [ -n "${2:-}" ]; then
+      echo "下载标题匹配「$2」的视频（1080p，已下载的会跳过）"
+      "$PY" tools/course/fetch.py --teacher peo --match "$2" --cookies-from-browser "$BROWSER" "${NET[@]}"
+    else
+      echo "下载 ${#LESSONS[@]} 个声乐教学视频（1080p，已下载的会跳过）"
+      ids=$(IFS=,; echo "${LESSONS[*]}")
+      "$PY" tools/course/fetch.py --teacher peo --ids "$ids" --cookies-from-browser "$BROWSER" "${NET[@]}"
+    fi
     ;;
 
   ids)
@@ -101,11 +128,11 @@ case "${1:-help}" in
 
   all)
     "$0" list
-    "$0" download "${2:-$MATCH_DEFAULT}"
+    "$0" download ${2:+"$2"}
     "$0" analyze
     ;;
 
   *)
-    sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'
     ;;
 esac
