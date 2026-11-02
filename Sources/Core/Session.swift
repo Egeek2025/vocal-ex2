@@ -189,7 +189,8 @@ enum Planner {
             if o.listenOnly {
                 s0 = t
             } else {
-                let n = k == 0 ? max(4, o.countIn) : (o.courseRhythm ? 0 : max(1, o.countIn))
+                // the course counts in only before the first key, briefly
+                let n = o.courseRhythm ? (k == 0 ? 2 : 0) : (k == 0 ? max(4, o.countIn) : max(1, o.countIn))
                 countIn = (0..<n).map { t + Double($0) * beat }
                 t += Double(n) * beat
                 s0 = t

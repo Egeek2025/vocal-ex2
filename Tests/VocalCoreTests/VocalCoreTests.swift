@@ -135,13 +135,12 @@ final class CourseTests: XCTestCase {
         XCTAssertEqual((1 + p.beats) * 60 / bpm, 3.58, accuracy: 0.05)
     }
 
-    func testMeasuredKeyTimesBelongToCheckedExercises() {
-        XCTAssertFalse(Course.keySeconds.isEmpty)
+    func testMeasuredKeyTimesArePlausible() {
+        XCTAssertGreaterThan(Course.keySeconds.count, 40)
         for (id, s) in Course.keySeconds {
             let ex = Course.byID[id]
-            XCTAssertNotNil(ex, id)
-            XCTAssertTrue(ex?.verified ?? false, id)
-            XCTAssertTrue((1.5...12).contains(s), id)
+            XCTAssertEqual(ex?.kind, .pitch, id)
+            XCTAssertTrue((2...12).contains(s), id)
         }
     }
 

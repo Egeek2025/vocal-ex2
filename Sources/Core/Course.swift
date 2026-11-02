@@ -322,16 +322,20 @@ enum Course {
     ]
 
     /// Seconds from one key to the next in the video (the piano's chord, then the singing, then straight on),
-    /// measured by tools/course/analyze.py and discover.py as the median spacing of the takes. Only for
-    /// exercises whose pattern is checked against the video: the tempo is worked out from it and the pattern.
+    /// measured by tools/course/analyze.py and discover.py as the median spacing of three or more takes in a
+    /// row. The tempo is worked out from it, so a key lasts as long as in the video even where the pattern
+    /// is not checked yet.
     static let keySeconds: [String: Double] = stoneyKeySeconds.merging(peoKeySeconds) { a, _ in a }
 
     static let stoneyKeySeconds: [String: Double] = [
-        "belt72": 3.9, "comp104": 3.31, "crack12": 6.91, "ee33": 3.34, "ee54": 2.87, "fals89": 2.87,
-        "guun": 3.03, "head98": 2.52, "hoong": 3.37, "i38": 3.37, "jaw35": 5.46, "larynx17": 7.61,
-        "low128": 4.54, "mix40": 2.77, "ng": 3.59, "ngah": 9.75, "ngv": 2.86, "oh61": 4.15, "penta3": 7.27,
-        "pitch34": 2.82, "str111": 3.09, "trill": 3.58, "twang": 6.99, "vib64": 10.44, "vwohm": 4.01,
-        "yoh": 3.01,
+        "ah130": 5.62, "belt70": 6.88, "belt71": 6.25, "belt72": 3.9, "chest98": 2.9, "comp104": 3.31,
+        "comp114": 6.2, "crack12": 6.91, "ee33": 3.34, "ee54": 2.87, "fals89": 2.87, "filter": 6.14,
+        "flex111": 3.69, "guun": 3.03, "head98": 2.52, "hoong": 3.37, "i38": 3.37, "jaw35": 5.46, "l66": 4.84,
+        "larynx129": 5.98, "larynx17": 7.61, "legato": 6.78, "low128": 4.54, "mix40": 2.77, "mix99": 2.84,
+        "nasal115": 6.19, "ng": 3.59, "ngah": 9.75, "ngv": 2.86, "nyay": 4.33, "oh61": 4.15, "passaggio": 5.58,
+        "penta3": 7.27, "pitch34": 2.82, "r67": 4.82, "riff120": 3.53, "slash27": 2.97, "spread": 7.36,
+        "stamina62": 2.52, "str111": 3.09, "straight": 6.68, "trill": 3.58, "twang": 6.99, "vib30": 4.16,
+        "vib64": 10.44, "vwohm": 4.01, "yodel": 4.05, "yoh": 3.01,
     ]
 
     static let stoneyStages = ["A": "基础", "B": "声区与过渡", "C": "元音与共鸣", "D": "力量与技巧", "E": "应用"]

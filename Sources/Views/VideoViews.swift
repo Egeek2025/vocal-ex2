@@ -197,6 +197,16 @@ final class CourseVideo {
         if play { player.play() }
     }
 
+    /// Moves the playback position by some seconds (scrolling over the video), within the video.
+    func nudge(by seconds: Double) {
+        guard player.currentItem?.status == .readyToPlay else { return }
+        let now = player.currentTime().seconds
+        let to = max(0, min(duration > 0 ? duration - 0.5 : .greatestFiniteMagnitude, (now.isFinite ? now : 0) + seconds))
+        let tol = CMTime(seconds: 0.2, preferredTimescale: 600)
+        player.seek(to: CMTime(seconds: to, preferredTimescale: 600), toleranceBefore: tol, toleranceAfter: tol)
+        time = to
+    }
+
     func close() {
         status?.invalidate()
         status = nil
@@ -211,11 +221,28 @@ final class CourseVideo {
 
 /// AVKit's own player view: the native controls, without SwiftUI's VideoPlayer wrapper.
 #if os(macOS)
+/// A player view that turns scrolling over the video into seeking, instead of letting the page scroll:
+/// up or right goes forward, down or left goes back.
+final class ScrubPlayerView: AVPlayerView {
+    var onScrub: ((Double) -> Void)?
+
+    override func scrollWheel(with e: NSEvent) {
+        guard let onScrub else { return super.scrollWheel(with: e) }
+        let dx = e.scrollingDeltaX, dy = e.scrollingDeltaY
+        let d = abs(dy) >= abs(dx) ? dy : -dx
+        guard d != 0 else { return }
+        // trackpads report fine deltas in points, mouse wheels a line per notch
+        onScrub(e.hasPreciseScrollingDeltas ? Double(d) * 0.08 : Double(d) * 5)
+    }
+}
+
 struct PlayerView: NSViewRepresentable {
     let player: AVPlayer
+    var onScrub: ((Double) -> Void)? = nil
 
     func makeNSView(context: Context) -> AVPlayerView {
-        let v = AVPlayerView()
+        let v = ScrubPlayerView()
+        v.onScrub = onScrub
         v.player = player
         v.controlsStyle = .inline
         v.showsFullScreenToggleButton = true
@@ -224,6 +251,7 @@ struct PlayerView: NSViewRepresentable {
 
     func updateNSView(_ v: AVPlayerView, context: Context) {
         if v.player !== player { v.player = player }
+        (v as? ScrubPlayerView)?.onScrub = onScrub
     }
 
     static func dismantleNSView(_ v: AVPlayerView, coordinator: ()) {
@@ -233,6 +261,7 @@ struct PlayerView: NSViewRepresentable {
 #else
 struct PlayerView: UIViewControllerRepresentable {
     let player: AVPlayer
+    var onScrub: ((Double) -> Void)? = nil
 
     func makeUIViewController(context: Context) -> AVPlayerViewController {
         let c = AVPlayerViewController()
@@ -338,7 +367,7 @@ private struct VideoSurface: View {
             .aspectRatio(16 / 9, contentMode: .fit)
             .background(RoundedRectangle(cornerRadius: 8).fill(.quaternary))
         } else {
-            PlayerView(player: video.player)
+            PlayerView(player: video.player) { video.nudge(by: $0) }
                 .frame(maxWidth: .infinity)
                 .aspectRatio(16 / 9, contentMode: .fit)
                 .background(.black)
