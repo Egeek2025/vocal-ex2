@@ -213,12 +213,35 @@ final class CourseVideo {
 #if os(macOS)
 /// A player view that ignores every trackpad and wheel gesture while the pointer is over the video:
 /// no seeking, no zooming, and the page does not scroll either. Only clicks on its controls work.
+///
+/// The player's own controls layer handles scroll-to-seek before any outer view sees the event, so the
+/// gestures are dropped at the app's event intake instead: any scroll, pinch, rotate or swipe whose
+/// pointer is inside this view never reaches a view.
 final class GesturelessPlayerView: AVPlayerView {
-    override func scrollWheel(with event: NSEvent) {}
-    override func magnify(with event: NSEvent) {}
-    override func smartMagnify(with event: NSEvent) {}
-    override func rotate(with event: NSEvent) {}
-    override func swipe(with event: NSEvent) {}
+    private var monitor: Any?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let m = monitor { NSEvent.removeMonitor(m) }
+        monitor = nil
+        guard window != nil else { return }
+        let gestures: NSEvent.EventTypeMask = [.scrollWheel, .magnify, .smartMagnify, .rotate, .swipe, .beginGesture, .endGesture]
+        monitor = NSEvent.addLocalMonitorForEvents(matching: gestures) { [weak self] e in
+            guard let self, let w = self.window, e.window === w, !self.isHiddenOrHasHiddenAncestor else { return e }
+            let p = self.convert(e.locationInWindow, from: nil)
+            return self.bounds.contains(p) ? nil : e
+        }
+    }
+
+    override func removeFromSuperview() {
+        if let m = monitor { NSEvent.removeMonitor(m) }
+        monitor = nil
+        super.removeFromSuperview()
+    }
+
+    deinit {
+        if let m = monitor { NSEvent.removeMonitor(m) }
+    }
 }
 
 struct PlayerView: NSViewRepresentable {
