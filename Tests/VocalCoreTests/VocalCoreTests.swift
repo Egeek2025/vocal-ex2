@@ -144,6 +144,20 @@ final class CourseTests: XCTestCase {
         }
     }
 
+    func testEveryWeekHasSongs() {
+        for t in Course.teachers {
+            for w in t.weeks.indices {
+                let songs = Course.songs(teacher: t.id, week: w)
+                XCTAssertFalse(songs.isEmpty, "\(t.id) week \(w + 1)")
+                for s in songs {
+                    XCTAssertTrue((1...3).contains(s.level), s.title)
+                    XCTAssertEqual(s.searchLinks.count, 5, s.title)
+                }
+            }
+            XCTAssertTrue(Course.songs(teacher: t.id, week: t.weeks.count).isEmpty)
+        }
+    }
+
     func testBilibiliVideoLinks() {
         let t = Teacher(id: "x", name: "", about: "", platform: .bilibili, home: Course.peo.home, exercises: [],
                         warmup: [], weeks: [], stageNames: [:], checks: [], videos: [1: "BV1xx411c7mD"], cueChord: [], hasPrograms: false)

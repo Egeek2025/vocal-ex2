@@ -124,7 +124,7 @@ enum Routine {
                                      detail: "复习上周的一个练习。", maxKeys: 6))
         }
         steps.append(RoutineStep(id: "song", kind: .song, exercise: nil, minutes: 8, title: "用歌曲套用",
-                                 detail: "选一首熟悉的歌，把今天练的重点用进去，录下来听一遍。"))
+                                 detail: "从下面「本周练习曲目」里选一首（或你熟悉的歌），把今天练的重点用进去，录下来听一遍。"))
         steps.append(RoutineStep(id: "cooldown", kind: .cooldown, exercise: nil, minutes: 2, title: "放松",
                                  detail: "轻柔地从高到低滑几次音，喝点水。"))
         return DayPlan(week: w, day: day, headline: headline, steps: steps)

@@ -49,6 +49,11 @@ struct CourseSidebar: View {
                 Text("在「设置」里切换老师、指定课程视频文件夹。")
             }
             Section {
+                WeekSongs(teacher: model.teacherID, week: model.week)
+            } header: {
+                Text("第 \(model.week + 1) 周练习曲目")
+            }
+            Section {
                 CourseVideosButton()
             }
             Section("每日热身") {

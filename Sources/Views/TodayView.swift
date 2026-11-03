@@ -62,6 +62,14 @@ struct TodayView: View {
                 }
             }
 
+            Section {
+                WeekSongs(teacher: model.teacherID, week: plan.week)
+            } header: {
+                Text("本周练习曲目")
+            } footer: {
+                Text("用在「用歌曲套用」那一步：按本周的重点唱其中一首，录下来听。用适合自己的调唱，大多数音乐 App 和 K 歌软件都能升降调。")
+            }
+
             if model.teacher.hasPrograms {
             Section {
                 ForEach(Routine.Program.allCases) { program in
